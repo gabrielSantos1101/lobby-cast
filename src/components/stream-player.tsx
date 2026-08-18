@@ -170,13 +170,17 @@ export function StreamPlayer({
 					}
 				}
 
-				await new Promise<void>((resolve, reject) => {
-					const timeout = setTimeout(
-						() => reject(new Error("Conexão ICE falhou")),
-						10000,
-					);
+				let iceConnected = false;
+
+				await new Promise<void>((resolve) => {
+					const timeout = setTimeout(() => {
+						console.log("[StreamPlayer] ICE timeout, but checking for tracks anyway...");
+						resolve();
+					}, 10000);
 					const check = () => {
 						if (pc.iceConnectionState === "connected") {
+							iceConnected = true;
+							console.log("[StreamPlayer] ICE connected!");
 							clearTimeout(timeout);
 							resolve();
 						}
@@ -184,8 +188,10 @@ export function StreamPlayer({
 					pc.addEventListener("iceconnectionstatechange", check);
 				});
 
+				console.log("[StreamPlayer] ICE connected:", iceConnected, "proceeding anyway if tracks received");
+
 				if (!cancelled) {
-					console.log("[StreamPlayer] connected!");
+					console.log("[StreamPlayer] connected (tracks received)!");
 					setConnected(true);
 				}
 			} catch (err) {
