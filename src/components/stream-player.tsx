@@ -85,7 +85,9 @@ export function StreamPlayer({
 			try {
 				setError(null);
 				const broadcasterSessionId = streamId;
+				console.log("[StreamPlayer] connecting, broadcasterSessionId:", broadcasterSessionId);
 				const mySessionId = await createSession();
+				console.log("[StreamPlayer] mySessionId:", mySessionId);
 
 				const pc = new RTCPeerConnection({
 					iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }],
