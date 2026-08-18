@@ -7,7 +7,6 @@ import { Input } from "#/components/ui/input";
 import { getStreamWidths } from "#/lib/stream-layout";
 
 export const Route = createFileRoute("/watch/$streamId")({
-	ssr: false,
 	component: Watch,
 });
 

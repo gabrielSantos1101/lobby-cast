@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/watch/:path*", "destination": "/watch/:path*" }
+  ]
+}
