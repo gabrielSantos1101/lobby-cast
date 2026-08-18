@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
+import { ClientOnly } from "#/components/client-only";
 import { StreamPlayer } from "#/components/stream-player";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -12,6 +13,7 @@ export const Route = createFileRoute("/watch/$streamId")({
 
 function Watch() {
 	const { streamId: initialStreamId } = Route.useParams();
+	console.log("[Watch] rendering, initialStreamId:", initialStreamId);
 	const navigate = useNavigate();
 	const [streamIds, setStreamIds] = useState<string[]>([initialStreamId]);
 	const [newCode, setNewCode] = useState("");
@@ -36,7 +38,9 @@ function Watch() {
 			>
 				{streamIds.map((id, i) => (
 					<div key={id} className={`${widths[i]} min-h-[300px]`}>
-						<StreamPlayer streamId={id} />
+						<ClientOnly>
+							<StreamPlayer streamId={id} />
+						</ClientOnly>
 					</div>
 				))}
 			</div>

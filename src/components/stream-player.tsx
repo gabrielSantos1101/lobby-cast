@@ -117,23 +117,31 @@ export function StreamPlayer({
 					videoRef.current.srcObject = combined;
 				};
 
-				const pullRes = await pullTracks({
-					data: {
-						sessionId: mySessionId,
-						tracks: [
-							{
-								location: "remote",
-								trackName: "video",
-								sessionId: broadcasterSessionId,
-							},
-							{
-								location: "remote",
-								trackName: "audio",
-								sessionId: broadcasterSessionId,
-							},
-						],
-					},
-				});
+				let pullRes;
+				try {
+					console.log("[StreamPlayer] calling pullTracks...");
+					pullRes = await pullTracks({
+						data: {
+							sessionId: mySessionId,
+							tracks: [
+								{
+									location: "remote",
+									trackName: "video",
+									sessionId: broadcasterSessionId,
+								},
+								{
+									location: "remote",
+									trackName: "audio",
+									sessionId: broadcasterSessionId,
+								},
+							],
+						},
+					});
+					console.log("[StreamPlayer] pullTracks completed, result:", pullRes);
+				} catch (e) {
+					console.error("[StreamPlayer] pullTracks failed:", e);
+					throw e;
+				}
 
 				if (pullRes.errorCode) {
 					throw new Error(pullRes.errorDescription ?? "Falha ao puxar tracks");
@@ -168,8 +176,12 @@ export function StreamPlayer({
 					pc.addEventListener("iceconnectionstatechange", check);
 				});
 
-				if (!cancelled) setConnected(true);
+				if (!cancelled) {
+					console.log("[StreamPlayer] connected!");
+					setConnected(true);
+				}
 			} catch (err) {
+				console.error("[StreamPlayer] error:", err);
 				if (!cancelled && err instanceof Error) {
 					setError(err.message);
 				}
