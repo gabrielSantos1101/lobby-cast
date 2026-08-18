@@ -39,7 +39,7 @@ function Watch() {
 	);
 
 	const widths = getStreamWidths(streamIds.length);
-	const justify = streamIds.length === 3 ? "justify-center" : "";
+	const justify = streamIds.length === 3 ? "justify-center" : streamIds.length === 2 ? "justify-center" : "";
 
 	const isSingle = streamIds.length === 1;
 
@@ -48,7 +48,7 @@ function Watch() {
 			<h1 className="text-2xl font-bold text-center mb-4">Assistindo transmissão</h1>
 
 			<div
-				className={`flex flex-wrap gap-3 w-full max-w-6xl mx-auto flex-1 ${justify} ${isSingle ? "items-center" : "items-start"}`}
+				className={`flex flex-wrap gap-4 w-full max-w-7xl mx-auto flex-1 ${justify} ${isSingle ? "items-center" : "items-start"}`}
 			>
 				{streamIds.map((id, i) => (
 					<div
@@ -67,7 +67,7 @@ function Watch() {
 				))}
 			</div>
 
-			<div className="flex gap-2 w-full max-w-6xl">
+			<div className="flex gap-2 w-full max-w-7xl">
 				<Input
 					value={newCode}
 					onChange={(e) => setNewCode(e.target.value)}
