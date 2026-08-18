@@ -22,6 +22,8 @@ function Share() {
 
 	const [watchIds, setWatchIds] = useState<string[]>([]);
 	const [newCode, setNewCode] = useState("");
+	const [resolution, setResolution] = useState<"720" | "1080">("1080");
+	const [fps, setFps] = useState(30);
 
 	const watchingOthers = watchIds.length > 0;
 
@@ -69,7 +71,11 @@ function Share() {
 			setError(null);
 
 			const screen = await navigator.mediaDevices.getDisplayMedia({
-				video: true,
+				video: {
+					width: { ideal: Number(resolution) === 720 ? 1280 : 1920 },
+					height: { ideal: Number(resolution) },
+					frameRate: { ideal: fps },
+				},
 				audio: true,
 			});
 			streamRef.current = screen;
@@ -137,7 +143,7 @@ function Share() {
 				setError(err.message);
 			}
 		}
-	}, [stopSharing]);
+	}, [stopSharing, resolution, fps]);
 
 	if (!sharing) {
 		return (
@@ -146,6 +152,42 @@ function Share() {
 					<h1 className="text-2xl font-bold text-center">Lobby Cast</h1>
 
 					{error && <p className="text-red-400 text-sm text-center">{error}</p>}
+
+					<div className="flex gap-3">
+						<div className="flex-1 space-y-1">
+							<label htmlFor="resolution" className="text-xs text-zinc-500">
+								Resolução
+							</label>
+							<select
+								id="resolution"
+								value={resolution}
+								onChange={(e) =>
+									setResolution(e.target.value as "720" | "1080")
+								}
+								className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-500 cursor-pointer"
+							>
+								<option value="720">720p</option>
+								<option value="1080">1080p</option>
+							</select>
+						</div>
+						<div className="flex-1 space-y-1">
+							<label htmlFor="fps" className="text-xs text-zinc-500">
+								FPS
+							</label>
+							<select
+								id="fps"
+								value={fps}
+								onChange={(e) => setFps(Number(e.target.value))}
+								className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-500 cursor-pointer"
+							>
+								<option value={5}>5</option>
+								<option value={15}>15</option>
+								<option value={24}>24</option>
+								<option value={30}>30</option>
+								<option value={60}>60</option>
+							</select>
+						</div>
+					</div>
 
 					<button
 						type="button"
