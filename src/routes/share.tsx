@@ -15,7 +15,6 @@ import {
 import { Slider } from "#/components/ui/slider";
 import { Toggle } from "#/components/ui/toggle";
 import { createSession, pushTracks } from "#/lib/calls";
-import { encodeStreamId } from "#/lib/stream-id";
 import { getStreamWidths } from "#/lib/stream-layout";
 
 export const Route = createFileRoute("/share")({ component: Share });
@@ -229,10 +228,10 @@ function Share() {
 				data: {
 					sessionId,
 					sdp: offer.sdp ?? "",
-					tracks: transceivers.map(({ mid, sender }) => ({
+					tracks: transceivers.map(({ mid, sender }, _i) => ({
 						location: "local",
 						mid: mid ?? "",
-						trackName: sender.track?.id ?? "",
+						trackName: sender.track?.kind === "audio" ? "audio" : "video",
 					})),
 				},
 			});
@@ -255,14 +254,7 @@ function Share() {
 				pc.addEventListener("iceconnectionstatechange", check);
 			});
 
-			const streamId = encodeStreamId(sessionId, [
-				...transceivers.map(({ sender }) => ({
-					trackName: sender.track?.id ?? "",
-					sessionId,
-				})),
-			]);
-
-			setStreamCode(streamId);
+			setStreamCode(sessionId);
 			setSharing(true);
 		} catch (err) {
 			if (err instanceof Error && err.name !== "AbortError") {

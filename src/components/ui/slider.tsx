@@ -18,7 +18,10 @@ function Slider({
 
 	return (
 		<SliderPrimitive.Root
-			className={cn("relative flex w-full touch-none items-center select-none", className)}
+			className={cn(
+				"relative flex w-full touch-none items-center select-none",
+				className,
+			)}
 			data-slot="slider"
 			defaultValue={defaultValue}
 			value={value}

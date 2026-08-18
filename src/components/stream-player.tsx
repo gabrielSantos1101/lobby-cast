@@ -9,7 +9,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Slider } from "#/components/ui/slider";
 import { Toggle } from "#/components/ui/toggle";
 import { createSession, pullTracks, renegotiate } from "#/lib/calls";
-import { decodeStreamId } from "#/lib/stream-id";
 
 export function StreamPlayer({
 	streamId,
@@ -24,7 +23,6 @@ export function StreamPlayer({
 	const [connected, setConnected] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [muted, setMuted] = useState(false);
-	const [showVolume, setShowVolume] = useState(false);
 	const [volume, setVolume] = useState(1);
 	const [isPip, setIsPip] = useState(false);
 	const [fullscreen, setFullscreen] = useState(false);
@@ -86,7 +84,7 @@ export function StreamPlayer({
 		async function connect() {
 			try {
 				setError(null);
-				const { tracks } = decodeStreamId(streamId);
+				const broadcasterSessionId = streamId;
 				const mySessionId = await createSession();
 
 				const pc = new RTCPeerConnection({
@@ -99,24 +97,47 @@ export function StreamPlayer({
 				}
 				pcRef.current = pc;
 
+				const remoteStreams = new Map<string, MediaStream>();
+
 				pc.ontrack = (event) => {
-					if (videoRef.current && event.streams[0]) {
-						videoRef.current.srcObject = event.streams[0];
+					if (!videoRef.current) return;
+					const stream = event.streams[0];
+					if (!stream) return;
+					if (!remoteStreams.has(stream.id)) {
+						remoteStreams.set(stream.id, stream);
 					}
+					const combined = new MediaStream();
+					for (const s of remoteStreams.values()) {
+						for (const track of s.getTracks()) {
+							combined.addTrack(track);
+						}
+					}
+					videoRef.current.srcObject = combined;
 				};
 
 				const pullRes = await pullTracks({
 					data: {
 						sessionId: mySessionId,
-						tracks: tracks.map((t) => ({
-							location: "remote",
-							trackName: t.trackName,
-							sessionId: t.sessionId,
-						})),
+						tracks: [
+							{
+								location: "remote",
+								trackName: "video",
+								sessionId: broadcasterSessionId,
+							},
+							{
+								location: "remote",
+								trackName: "audio",
+								sessionId: broadcasterSessionId,
+							},
+						],
 					},
 				});
 
-				if (pullRes.requiresImmediateRenegotiation) {
+				if (pullRes.errorCode) {
+					throw new Error(pullRes.errorDescription ?? "Falha ao puxar tracks");
+				}
+
+				if (pullRes.sessionDescription) {
 					await pc.setRemoteDescription(
 						new RTCSessionDescription(pullRes.sessionDescription),
 					);
@@ -187,44 +208,31 @@ export function StreamPlayer({
 			/>
 
 			<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-				<div className="relative">
-					<Toggle
-						pressed={muted}
-						onPressedChange={toggleMute}
-						size={size === "mini" ? "sm" : "default"}
-						className="text-white hover:text-zinc-300 hover:bg-white/10 data-[state=on]:bg-white/10 data-[state=on]:text-white"
-						onMouseEnter={() => setShowVolume(true)}
-						onMouseLeave={() => setShowVolume(false)}
-					>
-						{muted ? (
-							<VolumeX size={size === "mini" ? 14 : 20} />
-						) : (
-							<Volume2 size={size === "mini" ? 14 : 20} />
-						)}
-					</Toggle>
-
-					{showVolume && (
-						<div
-							className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-zinc-900 rounded-lg px-2 py-3"
-							onPointerEnter={() => setShowVolume(true)}
-							onPointerLeave={() => setShowVolume(false)}
-						>
-							<Slider
-								min={0}
-								max={1}
-								step={0.05}
-								value={[volume]}
-								onValueChange={(v) => {
-									const val = Array.isArray(v) ? v[0] : v;
-									setVolume(val);
-									if (videoRef.current) videoRef.current.volume = val;
-								}}
-								orientation="vertical"
-								className="h-20 w-5"
-							/>
-						</div>
+				<Toggle
+					pressed={muted}
+					onPressedChange={toggleMute}
+					size={size === "mini" ? "sm" : "default"}
+					className="text-white hover:text-zinc-300 hover:bg-white/10 data-[state=on]:bg-white/10 data-[state=on]:text-white"
+				>
+					{muted ? (
+						<VolumeX size={size === "mini" ? 14 : 20} />
+					) : (
+						<Volume2 size={size === "mini" ? 14 : 20} />
 					)}
-				</div>
+				</Toggle>
+
+				<Slider
+					min={0}
+					max={1}
+					step={0.05}
+					value={[volume]}
+					onValueChange={(v) => {
+						const val = Array.isArray(v) ? v[0] : v;
+						setVolume(val);
+						if (videoRef.current) videoRef.current.volume = val;
+					}}
+					className="w-24"
+				/>
 
 				<div className="flex-1" />
 
