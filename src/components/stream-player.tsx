@@ -215,7 +215,7 @@ export function StreamPlayer({
 									setVolume(v);
 									if (videoRef.current) videoRef.current.volume = v;
 								}}
-								className="w-20 accent-blue-500"
+								className="w-20 h-1.5 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500"
 								style={{
 									writingMode: "vertical-lr",
 									direction: "rtl",
