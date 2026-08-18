@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Volume2, VolumeX } from "lucide-react";
+import { Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { Draggable } from "#/components/draggable";
 import { StreamPlayer } from "#/components/stream-player";
@@ -16,9 +16,11 @@ function Share() {
 	const [error, setError] = useState<string | null>(null);
 	const [muted, setMuted] = useState(false);
 	const [volume, setVolume] = useState(1);
+	const [audioEnabled, setAudioEnabled] = useState(true);
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const pcRef = useRef<RTCPeerConnection | null>(null);
 	const streamRef = useRef<MediaStream | null>(null);
+	const transceiversRef = useRef<RTCRtpTransceiver[] | null>(null);
 
 	const [watchIds, setWatchIds] = useState<string[]>([]);
 	const [newCode, setNewCode] = useState("");
@@ -53,6 +55,47 @@ function Share() {
 		setMuted(newMuted);
 	}, [muted]);
 
+	const toggleAudio = useCallback(() => {
+		const stream = streamRef.current;
+		const transceivers = transceiversRef.current;
+		const pc = pcRef.current;
+		if (!stream || !transceivers || !pc) return;
+
+		const newEnabled = !audioEnabled;
+
+		if (newEnabled) {
+			stream.getAudioTracks().forEach((track) => {
+				track.enabled = true;
+			});
+			const audioTrack = stream.getAudioTracks()[0];
+			if (audioTrack) {
+				const audioTransceiver = transceivers.find(
+					(t) => t.sender.track?.kind === "audio",
+				);
+				if (audioTransceiver) {
+					audioTransceiver.sender.replaceTrack(audioTrack);
+				}
+			}
+		} else {
+			const silentTrack = new MediaStreamTrack({
+				kind: "audio",
+				...new AudioContext().createMediaStreamDestination().stream.getAudioTracks()[0]
+					.getSettings(),
+			});
+			const audioTransceiver = transceivers.find(
+				(t) => t.sender.track?.kind === "audio",
+			);
+			if (audioTransceiver) {
+				audioTransceiver.sender.replaceTrack(silentTrack);
+			}
+			stream.getAudioTracks().forEach((track) => {
+				track.enabled = false;
+			});
+		}
+
+		setAudioEnabled(newEnabled);
+	}, [audioEnabled]);
+
 	const stopSharing = useCallback(() => {
 		pcRef.current?.close();
 		streamRef.current?.getTracks().forEach((t) => {
@@ -60,11 +103,69 @@ function Share() {
 		});
 		pcRef.current = null;
 		streamRef.current = null;
+		transceiversRef.current = null;
 		setSharing(false);
 		setStreamCode(null);
 		setMuted(false);
+		setAudioEnabled(true);
 		setWatchIds([]);
 	}, []);
+
+	const changeStream = useCallback(async () => {
+		try {
+			setError(null);
+			const pc = pcRef.current;
+			const oldStream = streamRef.current;
+			const transceivers = transceiversRef.current;
+			if (!pc || !oldStream || !transceivers) return;
+
+			const newScreen = await navigator.mediaDevices.getDisplayMedia({
+				video: {
+					width: { ideal: Number(resolution) === 720 ? 1280 : 1920 },
+					height: { ideal: Number(resolution) },
+					frameRate: { ideal: fps },
+				},
+				audio: true,
+			});
+
+			const newVideo = newScreen.getVideoTracks()[0];
+			const newAudio = newScreen.getAudioTracks()[0];
+
+			const videoTransceiver = transceivers.find(
+				(t) => t.sender.track?.kind === "video",
+			);
+			if (videoTransceiver && newVideo) {
+				await videoTransceiver.sender.replaceTrack(newVideo);
+			}
+
+			const audioTransceiver = transceivers.find(
+				(t) => t.sender.track?.kind === "audio",
+			);
+			if (audioTransceiver && newAudio && audioEnabled) {
+				await audioTransceiver.sender.replaceTrack(newAudio);
+			}
+
+			oldStream.getTracks().forEach((t) => t.stop());
+
+			const combined = new MediaStream([
+				...(newVideo ? [newVideo] : []),
+				...(newAudio ? [newAudio] : []),
+			]);
+			streamRef.current = combined;
+
+			if (videoRef.current) {
+				videoRef.current.srcObject = combined;
+			}
+
+			combined.getTracks().forEach((track) => {
+				track.addEventListener("ended", () => stopSharing());
+			});
+		} catch (err) {
+			if (err instanceof Error && err.name !== "AbortError") {
+				setError(err.message);
+			}
+		}
+	}, [resolution, fps, audioEnabled, stopSharing]);
 
 	const startSharing = useCallback(async () => {
 		try {
@@ -95,6 +196,7 @@ function Share() {
 			const transceivers = screen
 				.getTracks()
 				.map((track) => pc.addTransceiver(track, { direction: "sendonly" }));
+			transceiversRef.current = transceivers;
 
 			const offer = await pc.createOffer();
 			await pc.setLocalDescription(offer);
@@ -276,8 +378,42 @@ function Share() {
 										setVolume(v);
 										if (videoRef.current) videoRef.current.volume = v;
 									}}
-									className="flex-1 accent-blue-600"
+									className="flex-1 h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:shadow-md"
 								/>
+							</div>
+
+							<div className="flex items-center gap-2">
+								<button
+									type="button"
+									onClick={changeStream}
+									className="px-4 py-2 rounded-lg text-sm bg-zinc-800 hover:bg-zinc-700 transition-colors cursor-pointer"
+								>
+									Aplicar {resolution}p / {fps}fps
+								</button>
+
+								<div className="flex-1" />
+
+								<button
+									type="button"
+									onClick={toggleAudio}
+									className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors cursor-pointer ${
+										audioEnabled
+											? "bg-zinc-800 hover:bg-zinc-700"
+											: "bg-red-900/50 hover:bg-red-900/70"
+									}`}
+								>
+									{audioEnabled ? (
+										<>
+											<Mic size={16} />
+											Áudio
+										</>
+									) : (
+										<>
+											<MicOff size={16} />
+											Sem áudio
+										</>
+									)}
+								</button>
 							</div>
 
 							{streamCode && (
@@ -393,7 +529,7 @@ function Share() {
 									setVolume(v);
 									if (videoRef.current) videoRef.current.volume = v;
 								}}
-								className="flex-1 accent-blue-500"
+								className="flex-1 h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:shadow-md"
 							/>
 							<span className="text-xs text-zinc-500 w-12 truncate">
 								Ao vivo
