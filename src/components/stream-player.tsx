@@ -176,7 +176,7 @@ export function StreamPlayer({
 					const timeout = setTimeout(() => {
 						console.log("[StreamPlayer] ICE timeout, but checking for tracks anyway...");
 						resolve();
-					}, 10000);
+					}, 20000);
 					const check = () => {
 						if (pc.iceConnectionState === "connected") {
 							iceConnected = true;
@@ -232,6 +232,7 @@ export function StreamPlayer({
 				ref={videoRef}
 				autoPlay
 				playsInline
+				muted
 				className="w-full h-full object-contain"
 			/>
 
