@@ -80,6 +80,7 @@ export function StreamPlayer({
 
 	useEffect(() => {
 		let cancelled = false;
+		let checkTracks: ReturnType<typeof setInterval> | null = null;
 
 		async function connect() {
 			try {
@@ -111,12 +112,22 @@ export function StreamPlayer({
 					if (!videoRef.current) return;
 					const stream = event.streams[0];
 					if (!stream) return;
+
+					stream.onremovetrack = () => {
+						console.log("[StreamPlayer] track removed from stream");
+					};
+
 					if (!remoteStreams.has(stream.id)) {
 						remoteStreams.set(stream.id, stream);
 					}
 					const combined = new MediaStream();
 					for (const s of remoteStreams.values()) {
 						for (const track of s.getTracks()) {
+							if (track.readyState === "ended") {
+								console.log("[StreamPlayer] track ended, showing message");
+								setError("Transmissão encerrada");
+								return;
+							}
 							combined.addTrack(track);
 						}
 					}
@@ -173,6 +184,14 @@ export function StreamPlayer({
 						if (pc.iceConnectionState === "connected") {
 							clearTimeout(timeout);
 							resolve();
+						} else if (
+							pc.iceConnectionState === "disconnected" ||
+							pc.iceConnectionState === "failed" ||
+							pc.iceConnectionState === "closed"
+						) {
+							clearTimeout(timeout);
+							setError("Transmissão encerrada");
+							resolve();
 						}
 					};
 					pc.addEventListener("iceconnectionstatechange", check);
@@ -181,6 +200,18 @@ export function StreamPlayer({
 				if (!cancelled) {
 					setConnected(true);
 				}
+
+				checkTracks = setInterval(() => {
+					for (const stream of remoteStreams.values()) {
+						for (const track of stream.getTracks()) {
+							if (track.readyState === "ended") {
+								clearInterval(checkTracks!);
+								setError("Transmissão encerrada");
+								return;
+							}
+						}
+					}
+				}, 2000);
 			} catch (err) {
 				if (!cancelled && err instanceof Error) {
 					setError(err.message);
@@ -192,6 +223,7 @@ export function StreamPlayer({
 
 		return () => {
 			cancelled = true;
+			if (checkTracks) clearInterval(checkTracks);
 			pcRef.current?.close();
 			pcRef.current = null;
 		};

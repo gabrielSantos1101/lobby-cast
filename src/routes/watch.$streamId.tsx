@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
+import { X } from "lucide-react";
 import { StreamPlayer } from "#/components/stream-player";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -9,7 +10,7 @@ export const Route = createFileRoute("/watch/$streamId")({
 	component: Watch,
 });
 
-	function Watch() {
+function Watch() {
 	const { streamId: initialStreamId } = Route.useParams();
 	const navigate = useNavigate();
 	const [streamIds, setStreamIds] = useState<string[]>([initialStreamId]);
@@ -22,6 +23,20 @@ export const Route = createFileRoute("/watch/$streamId")({
 			setNewCode("");
 		}
 	}, [newCode, streamIds]);
+
+	const removeStream = useCallback(
+		(id: string) => {
+			setStreamIds((prev) => {
+				const next = prev.filter((s) => s !== id);
+				if (next.length === 0) {
+					navigate({ to: "/" });
+					return prev;
+				}
+				return next;
+			});
+		},
+		[navigate],
+	);
 
 	const widths = getStreamWidths(streamIds.length);
 	const justify = streamIds.length === 3 ? "justify-center" : "";
@@ -38,8 +53,15 @@ export const Route = createFileRoute("/watch/$streamId")({
 				{streamIds.map((id, i) => (
 					<div
 						key={id}
-						className={`${widths[i]} ${isSingle ? "max-w-full max-h-[calc(100vh-200px)]" : "aspect-video"}`}
+						className={`${widths[i]} ${isSingle ? "max-w-full max-h-[calc(100vh-200px)]" : "aspect-video"} relative`}
 					>
+						<button
+							type="button"
+							onClick={() => removeStream(id)}
+							className="absolute top-2 right-2 z-10 bg-black/60 hover:bg-black/80 rounded-full p-1 text-white transition-colors"
+						>
+							<X size={16} />
+						</button>
 						<StreamPlayer streamId={id} />
 					</div>
 				))}
