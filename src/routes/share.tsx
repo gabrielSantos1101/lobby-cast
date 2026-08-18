@@ -79,7 +79,9 @@ function Share() {
 		} else {
 			const silentTrack = new MediaStreamTrack({
 				kind: "audio",
-				...new AudioContext().createMediaStreamDestination().stream.getAudioTracks()[0]
+				...new AudioContext()
+					.createMediaStreamDestination()
+					.stream.getAudioTracks()[0]
 					.getSettings(),
 			});
 			const audioTransceiver = transceivers.find(
@@ -145,7 +147,7 @@ function Share() {
 				await audioTransceiver.sender.replaceTrack(newAudio);
 			}
 
-			oldStream.getTracks().forEach((t) => t.stop());
+			for (const t of oldStream.getTracks()) t.stop();
 
 			const combined = new MediaStream([
 				...(newVideo ? [newVideo] : []),
