@@ -200,7 +200,7 @@ export function StreamPlayer({
 	return (
 		<div
 			ref={containerRef}
-			className="relative group bg-black rounded-lg overflow-hidden"
+			className="relative group bg-black rounded-lg overflow-hidden w-full h-full flex items-center justify-center"
 		>
 			{error && (
 				<div className="absolute inset-0 flex items-center justify-center">

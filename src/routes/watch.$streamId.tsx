@@ -9,7 +9,7 @@ export const Route = createFileRoute("/watch/$streamId")({
 	component: Watch,
 });
 
-function Watch() {
+	function Watch() {
 	const { streamId: initialStreamId } = Route.useParams();
 	const navigate = useNavigate();
 	const [streamIds, setStreamIds] = useState<string[]>([initialStreamId]);
@@ -26,15 +26,20 @@ function Watch() {
 	const widths = getStreamWidths(streamIds.length);
 	const justify = streamIds.length === 3 ? "justify-center" : "";
 
+	const isSingle = streamIds.length === 1;
+
 	return (
-		<div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center p-4 gap-4">
-			<h1 className="text-2xl font-bold">Assistindo transmissão</h1>
+		<div className="min-h-screen bg-zinc-950 text-white flex flex-col p-4">
+			<h1 className="text-2xl font-bold text-center mb-4">Assistindo transmissão</h1>
 
 			<div
-				className={`flex flex-wrap gap-3 w-full max-w-6xl flex-1 ${justify}`}
+				className={`flex flex-wrap gap-3 w-full max-w-6xl mx-auto flex-1 ${justify} ${isSingle ? "items-center" : "items-start"}`}
 			>
 				{streamIds.map((id, i) => (
-					<div key={id} className={`${widths[i]} min-h-[300px]`}>
+					<div
+						key={id}
+						className={`${widths[i]} ${isSingle ? "max-w-full max-h-[calc(100vh-200px)]" : "aspect-video"}`}
+					>
 						<StreamPlayer streamId={id} />
 					</div>
 				))}
