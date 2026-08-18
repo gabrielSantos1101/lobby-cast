@@ -1,5 +1,116 @@
-
 @import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-background: oklch(0.1 0.005 285);
+  --color-foreground: oklch(0.97 0 0);
+  --color-card: oklch(0.12 0.005 285);
+  --color-card-foreground: oklch(0.97 0 0);
+  --color-popover: oklch(0.12 0.005 285);
+  --color-popover-foreground: oklch(0.97 0 0);
+  --color-primary: oklch(0.62 0.22 290);
+  --color-primary-foreground: oklch(0.98 0 0);
+  --color-secondary: oklch(0.22 0.01 285);
+  --color-secondary-foreground: oklch(0.92 0 0);
+  --color-muted: oklch(0.28 0.01 285);
+  --color-muted-foreground: oklch(0.58 0 0);
+  --color-accent: oklch(0.22 0.01 285);
+  --color-accent-foreground: oklch(0.92 0 0);
+  --color-destructive: oklch(0.577 0.245 27.325);
+  --color-destructive-foreground: oklch(0.97 0 0);
+  --color-border: oklch(0.22 0.01 285);
+  --color-input: oklch(0.22 0.01 285);
+  --color-ring: oklch(0.62 0.22 290);
+  --color-chart-1: oklch(0.62 0.22 290);
+  --color-chart-2: oklch(0.6 0.118 184.714);
+  --color-chart-3: oklch(0.398 0.07 227.392);
+  --color-chart-4: oklch(0.828 0.189 84.429);
+  --color-chart-5: oklch(0.769 0.188 70.08);
+  --color-sidebar: oklch(0.1 0.005 285);
+  --color-sidebar-foreground: oklch(0.97 0 0);
+  --color-sidebar-primary: oklch(0.62 0.22 290);
+  --color-sidebar-primary-foreground: oklch(0.98 0 0);
+  --color-sidebar-accent: oklch(0.22 0.01 285);
+  --color-sidebar-accent-foreground: oklch(0.92 0 0);
+  --color-sidebar-border: oklch(0.22 0.01 285);
+  --color-sidebar-ring: oklch(0.62 0.22 290);
+  --radius: 0.625rem;
+
+  --breakpoint-xs: 480px;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+}
+
+@keyframes accordion-down {
+  from { height: 0; }
+  to { height: var(--radix-accordion-content-height); }
+}
+
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to { height: 0; }
+}
+
+@keyframes enter {
+  from {
+    opacity: var(--tw-enter-opacity, 1);
+    transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0) scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1)) rotate(var(--tw-enter-rotate, 0));
+  }
+}
+
+@keyframes exit {
+  to {
+    opacity: var(--tw-exit-opacity, 1);
+    transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0) scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1)) rotate(var(--tw-exit-rotate, 0));
+  }
+}
+
+@layer utilities {
+  .animate-in {
+    --tw-enter-opacity: initial;
+    --tw-enter-scale: initial;
+    --tw-enter-rotate: initial;
+    --tw-enter-translate-x: initial;
+    --tw-enter-translate-y: initial;
+    animation-name: enter;
+    animation-duration: 150ms;
+  }
+
+  .animate-out {
+    --tw-exit-opacity: initial;
+    --tw-exit-scale: initial;
+    --tw-exit-rotate: initial;
+    --tw-exit-translate-x: initial;
+    --tw-exit-translate-y: initial;
+    animation-name: exit;
+    animation-duration: 150ms;
+  }
+
+  .fade-in-0 { --tw-enter-opacity: 0; }
+  .fade-out-0 { --tw-exit-opacity: 0; }
+  .zoom-in-95 { --tw-enter-scale: .95; }
+  .zoom-out-95 { --tw-exit-scale: .95; }
+  .slide-in-from-top-2 { --tw-enter-translate-y: -.5rem; }
+  .slide-in-from-bottom-2 { --tw-enter-translate-y: .5rem; }
+  .slide-in-from-left-2 { --tw-enter-translate-x: -.5rem; }
+  .slide-in-from-right-2 { --tw-enter-translate-x: .5rem; }
+  .duration-100 { animation-duration: .1s; }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+  }
+}
 
 * {
   box-sizing: border-box;
@@ -10,8 +121,3 @@ body,
 #app {
   min-height: 100%;
 }
-
-body {
-  margin: 0;
-}
-

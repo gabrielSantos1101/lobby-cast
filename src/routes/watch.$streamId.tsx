@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 import { StreamPlayer } from "#/components/stream-player";
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
 import { getStreamWidths } from "#/lib/stream-layout";
 
 export const Route = createFileRoute("/watch/$streamId")({
@@ -21,17 +23,6 @@ function Watch() {
 		}
 	}, [newCode, streamIds]);
 
-	const _removeStream = useCallback(
-		(id: string) => {
-			setStreamIds((prev) => {
-				const next = prev.filter((s) => s !== id);
-				if (next.length === 0) navigate({ to: "/" });
-				return next;
-			});
-		},
-		[navigate],
-	);
-
 	const widths = getStreamWidths(streamIds.length);
 	const justify = streamIds.length === 3 ? "justify-center" : "";
 
@@ -50,31 +41,25 @@ function Watch() {
 			</div>
 
 			<div className="flex gap-2 w-full max-w-6xl">
-				<input
-					type="text"
+				<Input
 					value={newCode}
 					onChange={(e) => setNewCode(e.target.value)}
 					onKeyDown={(e) => {
 						if (e.key === "Enter") addStream();
 					}}
 					placeholder="Adicionar outra live (cole o link ou código)"
-					className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+					className="flex-1"
 				/>
-				<button
-					type="button"
+				<Button
+					variant="secondary"
 					onClick={addStream}
 					disabled={!newCode.trim()}
-					className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm transition-colors cursor-pointer"
 				>
 					Adicionar
-				</button>
-				<button
-					type="button"
-					onClick={() => navigate({ to: "/" })}
-					className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-				>
+				</Button>
+				<Button variant="destructive" onClick={() => navigate({ to: "/" })}>
 					Sair
-				</button>
+				</Button>
 			</div>
 		</div>
 	);

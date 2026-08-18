@@ -1,8 +1,19 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Mic, MicOff, Volume2, VolumeX } from "lucide-react";
+import { Mic, MicOff, Monitor, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { Draggable } from "#/components/draggable";
 import { StreamPlayer } from "#/components/stream-player";
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select";
+import { Slider } from "#/components/ui/slider";
+import { Toggle } from "#/components/ui/toggle";
 import { createSession, pushTracks } from "#/lib/calls";
 import { encodeStreamId } from "#/lib/stream-id";
 import { getStreamWidths } from "#/lib/stream-layout";
@@ -77,13 +88,10 @@ function Share() {
 				}
 			}
 		} else {
-			const silentTrack = new MediaStreamTrack({
-				kind: "audio",
-				...new AudioContext()
-					.createMediaStreamDestination()
-					.stream.getAudioTracks()[0]
-					.getSettings(),
-			});
+			const ctx = new AudioContext();
+			const silentTrack = ctx
+				.createMediaStreamDestination()
+				.stream.getAudioTracks()[0];
 			const audioTransceiver = transceivers.find(
 				(t) => t.sender.track?.kind === "audio",
 			);
@@ -113,7 +121,21 @@ function Share() {
 		setWatchIds([]);
 	}, []);
 
-	const changeStream = useCallback(async () => {
+	const applyResolution = useCallback(async () => {
+		const stream = streamRef.current;
+		if (!stream) return;
+
+		const videoTrack = stream.getVideoTracks()[0];
+		if (videoTrack) {
+			await videoTrack.applyConstraints({
+				width: { ideal: Number(resolution) === 720 ? 1280 : 1920 },
+				height: { ideal: Number(resolution) },
+				frameRate: { ideal: fps },
+			});
+		}
+	}, [resolution, fps]);
+
+	const changeScreen = useCallback(async () => {
 		try {
 			setError(null);
 			const pc = pcRef.current;
@@ -259,47 +281,43 @@ function Share() {
 
 					<div className="flex gap-3">
 						<div className="flex-1 space-y-1">
-							<label htmlFor="resolution" className="text-xs text-zinc-500">
-								Resolução
-							</label>
-							<select
-								id="resolution"
+							<span className="text-xs text-zinc-500">Resolução</span>
+							<Select
 								value={resolution}
-								onChange={(e) =>
-									setResolution(e.target.value as "720" | "1080")
-								}
-								className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-500 cursor-pointer"
+								onValueChange={(v) => setResolution(v as "720" | "1080")}
 							>
-								<option value="720">720p</option>
-								<option value="1080">1080p</option>
-							</select>
+								<SelectTrigger className="w-full">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="720">720p</SelectItem>
+									<SelectItem value="1080">1080p</SelectItem>
+								</SelectContent>
+							</Select>
 						</div>
 						<div className="flex-1 space-y-1">
-							<label htmlFor="fps" className="text-xs text-zinc-500">
-								FPS
-							</label>
-							<select
-								id="fps"
-								value={fps}
-								onChange={(e) => setFps(Number(e.target.value))}
-								className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-500 cursor-pointer"
+							<span className="text-xs text-zinc-500">FPS</span>
+							<Select
+								value={String(fps)}
+								onValueChange={(v) => setFps(Number(v))}
 							>
-								<option value={5}>5</option>
-								<option value={15}>15</option>
-								<option value={24}>24</option>
-								<option value={30}>30</option>
-								<option value={60}>60</option>
-							</select>
+								<SelectTrigger className="w-full">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="5">5</SelectItem>
+									<SelectItem value="15">15</SelectItem>
+									<SelectItem value="24">24</SelectItem>
+									<SelectItem value="30">30</SelectItem>
+									<SelectItem value="60">60</SelectItem>
+								</SelectContent>
+							</Select>
 						</div>
 					</div>
 
-					<button
-						type="button"
-						onClick={startSharing}
-						className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors cursor-pointer"
-					>
+					<Button onClick={startSharing} className="w-full" size="lg">
 						Iniciar transmissão
-					</button>
+					</Button>
 
 					<div className="relative">
 						<div className="absolute inset-0 flex items-center">
@@ -311,15 +329,13 @@ function Share() {
 					</div>
 
 					<div className="space-y-2">
-						<input
-							type="text"
+						<Input
 							value={newCode}
 							onChange={(e) => setNewCode(e.target.value)}
 							placeholder="Cole o link ou código da live"
-							className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
 						/>
-						<button
-							type="button"
+						<Button
+							variant="secondary"
 							onClick={() => {
 								const code = newCode.trim();
 								if (code) {
@@ -330,10 +346,11 @@ function Share() {
 								}
 							}}
 							disabled={!newCode.trim()}
-							className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 rounded-lg transition-colors cursor-pointer"
+							className="w-full"
+							size="lg"
 						>
 							Assistir
-						</button>
+						</Button>
 					</div>
 				</div>
 			</div>
@@ -356,101 +373,59 @@ function Share() {
 							className="w-full rounded-lg bg-black aspect-video object-contain"
 						/>
 
-						<div className="space-y-3">
-							<div className="flex items-center gap-3">
-								<button
-									type="button"
-									onClick={toggleMute}
-									className={`px-4 py-2 rounded-lg text-sm transition-colors cursor-pointer ${
-										muted
-											? "bg-zinc-700 hover:bg-zinc-600"
-											: "bg-zinc-800 hover:bg-zinc-700"
-									}`}
-								>
-									{muted ? "Desmutar" : "Mutar"}
-								</button>
-								<input
-									type="range"
-									min="0"
-									max="1"
-									step="0.05"
-									value={volume}
-									onChange={(e) => {
-										const v = Number.parseFloat(e.target.value);
-										setVolume(v);
-										if (videoRef.current) videoRef.current.volume = v;
-									}}
-									className="flex-1 h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:shadow-md"
-								/>
-							</div>
-
-							<div className="flex items-center gap-2">
-								<button
-									type="button"
-									onClick={changeStream}
-									className="px-4 py-2 rounded-lg text-sm bg-zinc-800 hover:bg-zinc-700 transition-colors cursor-pointer"
-								>
-									Aplicar {resolution}p / {fps}fps
-								</button>
-
-								<div className="flex-1" />
-
-								<button
-									type="button"
-									onClick={toggleAudio}
-									className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors cursor-pointer ${
-										audioEnabled
-											? "bg-zinc-800 hover:bg-zinc-700"
-											: "bg-red-900/50 hover:bg-red-900/70"
-									}`}
-								>
-									{audioEnabled ? (
-										<>
-											<Mic size={16} />
-											Áudio
-										</>
-									) : (
-										<>
-											<MicOff size={16} />
-											Sem áudio
-										</>
-									)}
-								</button>
-							</div>
-
-							{streamCode && (
-								<div className="space-y-2">
-									<p className="text-sm text-zinc-400 text-center">
-										Compartilhe sua live:
-									</p>
-									<div className="flex gap-2">
-										<input
-											readOnly
-											value={`${window.location.origin}/watch/${streamCode}`}
-											className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm font-mono truncate"
-										/>
-										<button
-											type="button"
-											onClick={() => navigator.clipboard.writeText(streamCode)}
-											className="bg-zinc-800 hover:bg-zinc-700 px-4 py-3 rounded-lg text-sm transition-colors cursor-pointer"
-										>
-											Copiar código
-										</button>
-										<button
-											type="button"
-											onClick={() =>
-												navigator.clipboard.writeText(
-													`${window.location.origin}/watch/${streamCode}`,
-												)
-											}
-											className="bg-zinc-800 hover:bg-zinc-700 px-4 py-3 rounded-lg text-sm transition-colors cursor-pointer"
-										>
-											Copiar link
-										</button>
-									</div>
-								</div>
-							)}
+						<div className="flex items-center gap-3 px-1">
+							<Toggle
+								pressed={muted}
+								onPressedChange={toggleMute}
+								variant="outline"
+								size="sm"
+							>
+								{muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+							</Toggle>
+							<Slider
+								min={0}
+								max={1}
+								step={0.05}
+								value={[volume]}
+								onValueChange={(v) => {
+									const val = Array.isArray(v) ? v[0] : v;
+									setVolume(val);
+									if (videoRef.current) videoRef.current.volume = val;
+								}}
+								className="flex-1"
+							/>
 						</div>
+
+						{streamCode && (
+							<div className="space-y-2">
+								<p className="text-sm text-zinc-400 text-center">
+									Compartilhe sua live:
+								</p>
+								<div className="flex gap-2">
+									<Input
+										readOnly
+										value={`${window.location.origin}/watch/${streamCode}`}
+										className="flex-1 font-mono"
+									/>
+									<Button
+										variant="secondary"
+										onClick={() => navigator.clipboard.writeText(streamCode)}
+									>
+										Código
+									</Button>
+									<Button
+										variant="secondary"
+										onClick={() =>
+											navigator.clipboard.writeText(
+												`${window.location.origin}/watch/${streamCode}`,
+											)
+										}
+									>
+										Link
+									</Button>
+								</div>
+							</div>
+						)}
 					</div>
 				) : (
 					<div
@@ -465,41 +440,87 @@ function Share() {
 				)}
 			</div>
 
-			<div className="flex gap-2 p-4 border-t border-zinc-800">
-				<input
-					type="text"
-					value={newCode}
-					onChange={(e) => setNewCode(e.target.value)}
-					onKeyDown={(e) => {
-						if (e.key === "Enter") addWatch();
-					}}
-					placeholder="Adicionar outra live"
-					className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
-				/>
-				<button
-					type="button"
-					onClick={addWatch}
-					disabled={!newCode.trim()}
-					className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm transition-colors cursor-pointer"
-				>
-					Adicionar
-				</button>
+			<div className="border-t border-zinc-800 p-3">
+				<div className="flex items-center gap-2 flex-wrap">
+					<Input
+						value={newCode}
+						onChange={(e) => setNewCode(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") addWatch();
+						}}
+						placeholder="Adicionar outra live"
+						className="flex-1"
+					/>
+					<Button
+						variant="secondary"
+						size="sm"
+						onClick={addWatch}
+						disabled={!newCode.trim()}
+					>
+						Adicionar
+					</Button>
 
-				<button
-					type="button"
-					onClick={() => navigate({ to: "/" })}
-					className="bg-zinc-800 hover:bg-zinc-700 px-4 py-2 rounded-lg text-sm transition-colors cursor-pointer"
-				>
-					Voltar
-				</button>
+					<div className="w-px h-5 bg-zinc-700" />
 
-				<button
-					type="button"
-					onClick={stopSharing}
-					className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-				>
-					Parar transmissão
-				</button>
+					<Select
+						value={resolution}
+						onValueChange={(v) => setResolution(v as "720" | "1080")}
+					>
+						<SelectTrigger size="sm">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="720">720p</SelectItem>
+							<SelectItem value="1080">1080p</SelectItem>
+						</SelectContent>
+					</Select>
+
+					<Select value={String(fps)} onValueChange={(v) => setFps(Number(v))}>
+						<SelectTrigger size="sm">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="5">5 fps</SelectItem>
+							<SelectItem value="15">15 fps</SelectItem>
+							<SelectItem value="24">24 fps</SelectItem>
+							<SelectItem value="30">30 fps</SelectItem>
+							<SelectItem value="60">60 fps</SelectItem>
+						</SelectContent>
+					</Select>
+
+					<Button variant="secondary" size="sm" onClick={applyResolution}>
+						Aplicar
+					</Button>
+
+					<Button variant="secondary" size="sm" onClick={changeScreen}>
+						<Monitor size={14} />
+						Trocar tela
+					</Button>
+
+					<Toggle
+						pressed={!audioEnabled}
+						onPressedChange={toggleAudio}
+						variant="outline"
+						size="sm"
+					>
+						{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}
+						{audioEnabled ? "Áudio" : "Sem áudio"}
+					</Toggle>
+
+					<div className="flex-1" />
+
+					<Button
+						variant="secondary"
+						size="sm"
+						onClick={() => navigate({ to: "/" })}
+					>
+						Voltar
+					</Button>
+
+					<Button variant="destructive" size="sm" onClick={stopSharing}>
+						Parar
+					</Button>
+				</div>
 			</div>
 
 			{watchingOthers && (
@@ -513,25 +534,25 @@ function Share() {
 							className="w-full aspect-video object-contain bg-black"
 						/>
 						<div className="bg-zinc-900 p-2 flex items-center gap-2">
-							<button
-								type="button"
-								onClick={toggleMute}
-								className="text-white hover:text-zinc-300 transition-colors cursor-pointer"
+							<Toggle
+								pressed={muted}
+								onPressedChange={toggleMute}
+								variant="default"
+								size="sm"
 							>
-								{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-							</button>
-							<input
-								type="range"
-								min="0"
-								max="1"
-								step="0.05"
-								value={volume}
-								onChange={(e) => {
-									const v = Number.parseFloat(e.target.value);
-									setVolume(v);
-									if (videoRef.current) videoRef.current.volume = v;
+								{muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+							</Toggle>
+							<Slider
+								min={0}
+								max={1}
+								step={0.05}
+								value={[volume]}
+								onValueChange={(v) => {
+									const val = Array.isArray(v) ? v[0] : v;
+									setVolume(val);
+									if (videoRef.current) videoRef.current.volume = val;
 								}}
-								className="flex-1 h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:shadow-md"
+								className="flex-1"
 							/>
 							<span className="text-xs text-zinc-500 w-12 truncate">
 								Ao vivo

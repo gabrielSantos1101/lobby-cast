@@ -1,5 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -22,13 +24,13 @@ function Home() {
 			<div className="w-full max-w-sm space-y-6">
 				<h1 className="text-2xl font-bold text-center">Lobby Cast</h1>
 
-				<button
-					type="button"
+				<Button
 					onClick={() => navigate({ to: "/share" })}
-					className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors cursor-pointer"
+					className="w-full"
+					size="lg"
 				>
 					Iniciar transmissão
-				</button>
+				</Button>
 
 				<div className="relative">
 					<div className="absolute inset-0 flex items-center">
@@ -40,15 +42,13 @@ function Home() {
 				</div>
 
 				<div className="space-y-2">
-					<input
-						type="text"
+					<Input
 						value={code}
 						onChange={(e) => setCode(e.target.value)}
 						placeholder="Cole o link ou código da live"
-						className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
 					/>
-					<button
-						type="button"
+					<Button
+						variant="secondary"
 						onClick={() => {
 							const streamId = extractStreamId(code);
 							if (streamId) {
@@ -59,10 +59,11 @@ function Home() {
 							}
 						}}
 						disabled={!code.trim()}
-						className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 rounded-lg transition-colors cursor-pointer"
+						className="w-full"
+						size="lg"
 					>
 						Assistir
-					</button>
+					</Button>
 				</div>
 			</div>
 		</div>

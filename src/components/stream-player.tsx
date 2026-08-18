@@ -6,6 +6,8 @@ import {
 	VolumeX,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Slider } from "#/components/ui/slider";
+import { Toggle } from "#/components/ui/toggle";
 import { createSession, pullTracks, renegotiate } from "#/lib/calls";
 import { decodeStreamId } from "#/lib/stream-id";
 
@@ -26,7 +28,9 @@ export function StreamPlayer({
 	const [volume, setVolume] = useState(1);
 	const [isPip, setIsPip] = useState(false);
 	const [fullscreen, setFullscreen] = useState(false);
-	const [pipSupported] = useState(() => document.pictureInPictureEnabled);
+	const [pipSupported] = useState(
+		() => typeof document !== "undefined" && document.pictureInPictureEnabled,
+	);
 
 	useEffect(() => {
 		const video = videoRef.current;
@@ -184,19 +188,20 @@ export function StreamPlayer({
 
 			<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
 				<div className="relative">
-					<button
-						type="button"
-						onClick={toggleMute}
+					<Toggle
+						pressed={muted}
+						onPressedChange={toggleMute}
+						size={size === "mini" ? "sm" : "default"}
+						className="text-white hover:text-zinc-300 hover:bg-white/10 data-[state=on]:bg-white/10 data-[state=on]:text-white"
 						onMouseEnter={() => setShowVolume(true)}
 						onMouseLeave={() => setShowVolume(false)}
-						className="text-white hover:text-zinc-300 transition-colors cursor-pointer"
 					>
 						{muted ? (
 							<VolumeX size={size === "mini" ? 14 : 20} />
 						) : (
 							<Volume2 size={size === "mini" ? 14 : 20} />
 						)}
-					</button>
+					</Toggle>
 
 					{showVolume && (
 						<div
@@ -204,23 +209,18 @@ export function StreamPlayer({
 							onPointerEnter={() => setShowVolume(true)}
 							onPointerLeave={() => setShowVolume(false)}
 						>
-							<input
-								type="range"
-								min="0"
-								max="1"
-								step="0.05"
-								value={volume}
-								onChange={(e) => {
-									const v = Number.parseFloat(e.target.value);
-									setVolume(v);
-									if (videoRef.current) videoRef.current.volume = v;
+							<Slider
+								min={0}
+								max={1}
+								step={0.05}
+								value={[volume]}
+								onValueChange={(v) => {
+									const val = Array.isArray(v) ? v[0] : v;
+									setVolume(val);
+									if (videoRef.current) videoRef.current.volume = val;
 								}}
-								className="w-20 h-1.5 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500"
-								style={{
-									writingMode: "vertical-lr",
-									direction: "rtl",
-									height: "80px",
-								}}
+								orientation="vertical"
+								className="h-20 w-5"
 							/>
 						</div>
 					)}
