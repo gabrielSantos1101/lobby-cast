@@ -85,9 +85,7 @@ export function StreamPlayer({
 			try {
 				setError(null);
 				const broadcasterSessionId = streamId;
-				console.log("[StreamPlayer] connecting, broadcasterSessionId:", broadcasterSessionId);
 				const mySessionId = await createSession();
-				console.log("[StreamPlayer] mySessionId:", mySessionId);
 
 				const pc = new RTCPeerConnection({
 					iceServers: [
@@ -127,7 +125,6 @@ export function StreamPlayer({
 
 				let pullRes;
 				try {
-					console.log("[StreamPlayer] calling pullTracks...");
 					pullRes = await pullTracks({
 						data: {
 							sessionId: mySessionId,
@@ -145,9 +142,7 @@ export function StreamPlayer({
 							],
 						},
 					});
-					console.log("[StreamPlayer] pullTracks completed, result:", pullRes);
 				} catch (e) {
-					console.error("[StreamPlayer] pullTracks failed:", e);
 					throw e;
 				}
 
@@ -170,17 +165,12 @@ export function StreamPlayer({
 					}
 				}
 
-				let iceConnected = false;
-
 				await new Promise<void>((resolve) => {
 					const timeout = setTimeout(() => {
-						console.log("[StreamPlayer] ICE timeout, but checking for tracks anyway...");
 						resolve();
 					}, 20000);
 					const check = () => {
 						if (pc.iceConnectionState === "connected") {
-							iceConnected = true;
-							console.log("[StreamPlayer] ICE connected!");
 							clearTimeout(timeout);
 							resolve();
 						}
@@ -188,14 +178,10 @@ export function StreamPlayer({
 					pc.addEventListener("iceconnectionstatechange", check);
 				});
 
-				console.log("[StreamPlayer] ICE connected:", iceConnected, "proceeding anyway if tracks received");
-
 				if (!cancelled) {
-					console.log("[StreamPlayer] connected (tracks received)!");
 					setConnected(true);
 				}
 			} catch (err) {
-				console.error("[StreamPlayer] error:", err);
 				if (!cancelled && err instanceof Error) {
 					setError(err.message);
 				}
