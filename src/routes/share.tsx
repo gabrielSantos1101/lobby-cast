@@ -35,7 +35,7 @@ function Share() {
 	const [watchIds, setWatchIds] = useState<string[]>([]);
 	const [newCode, setNewCode] = useState("");
 	const [resolution, setResolution] = useState<"720" | "1080">("1080");
-	const [fps, setFps] = useState(30);
+	const [fps, setFps] = useState(24);
 
 	const watchingOthers = watchIds.length > 0;
 
