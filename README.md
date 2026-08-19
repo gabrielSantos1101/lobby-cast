@@ -1,194 +1,259 @@
-Welcome to your new TanStack Start app!
+# Lobby Cast
 
-# Getting Started
+Aplicação web para compartilhamento de tela ao vivo via WebRTC. Funciona como uma alternativa simples e auto-hospedável a plataformas como Discord Go Live ou Twitch — sem necessidade de conta, sem download, sem instalação. A pessoa abre o link, clica em transmitir, e quem tem o código assiste direto no navegador.
 
-To run this application:
+## Como funciona
+
+O fluxo é simples:
+
+1. **O transmissor** abre `/share`, seleciona resolução/FPS, clica em "Iniciar transmissão" e autoriza o compartilhamento de tela no navegador.
+2. O navegador captura a tela + áudio do sistema via `getDisplayMedia` e estabelece uma conexão WebRTC com o Cloudflare Calls.
+3. Um **session ID** é gerado no servidor — esse é o código da live.
+4. O transmissor compartilha o link (`/watch/<session-id>`) com quem quiser assistir.
+5. **O espectador** abre o link, o navegador cria uma conexão WebRTC separada e puxa as tracks (vídeo + áudio) do transmissor via Cloudflare Calls.
+6. A stream aparece em tempo real com controles de volume, PiP e tela cheia.
+
+Não existe sala, chat ou login. É P2P via Cloudflare como relay — o servidor só faz o signaling (troca de SDP/ICE), o fluxo de mídia vai direto entre os peers.
+
+## Arquitetura
+
+```
+┌─────────────┐         ┌──────────────────┐         ┌─────────────┐
+│  Transmissor │◄───────►│ Cloudflare Calls │◄───────►│  Espectador  │
+│  (browser)   │  WebRTC │  (signaling +    │  WebRTC │  (browser)   │
+│              │         │   TURN relay)    │         │              │
+└──────┬──────┘         └──────────────────┘         └──────┬──────┘
+       │                                                     │
+       │  getDisplayMedia()                                  │
+       │  (tela + áudio do sistema)                          │
+       │                                                     │
+       ▼                                                     ▼
+  ┌─────────┐                                          ┌─────────┐
+  │  Vite + │  Server Functions (signaling)             │  Vite + │
+  │  Nitro  │◄────────────────────────────────────────►│  Nitro  │
+  └─────────┘   POST /sessions/new                     └─────────┘
+                POST /sessions/:id/tracks/new
+                PUT  /sessions/:id/renegotiate
+```
+
+### Camadas
+
+| Camada | Responsabilidade |
+|--------|-----------------|
+| **Browser (transmissor)** | Captura tela+áudio via `getDisplayMedia`, cria `RTCPeerConnection`, envia SDP offer |
+| **Server Functions** (`src/lib/calls.ts`) | Proxy para a Cloudflare Calls API — cria sessões, faz push/pull de tracks, renegotiação SDP |
+| **Cloudflare Calls** | Signaling server + TURN relay. Não armazena streams — só roteia os pacotes WebRTC |
+| **Browser (espectador)** | Cria `RTCPeerConnection`, puxa tracks remotas, renderiza no `<video>` |
+
+### Server Functions
+
+Todas as interações com a Cloudflare Calls API passam por server functions do TanStack Start (`src/lib/calls.ts`), que rodam no servidor. Isso mantém o token de API e o App ID no lado do servidor, sem expor ao cliente.
+
+| Função | Método | O que faz |
+|--------|--------|-----------|
+| `createSession()` | POST | Cria uma nova sessão na Cloudflare Calls e retorna o `sessionId` |
+| `pushTracks()` | POST | Envia tracks (vídeo/áudio) do transmissor para a sessão com SDP offer |
+| `pullTracks()` | POST | Puxa tracks remotas de outra sessão (usado pelo espectador) |
+| `renegotiate()` | PUT | Finaliza a negociação SDP com a answer do espectador |
+
+### ICE Servers
+
+As conexões usam os seguintes servidores STUN/TURN para NAT traversal:
+
+- `stun:stun.cloudflare.com:3478` (Cloudflare)
+- `stun:stun.l.google.com:19302` (Google)
+- `turn:openrelay.metered.ca:80` (OpenRelay — fallback TURN gratuito)
+
+### Multi-stream
+
+A página `/watch/:streamId` permite adicionar múltiplas streams simultaneamente. O layout se adapta automaticamente:
+
+- 1 stream → largura total
+- 2-4 streams → grid 2 colunas
+- 5+ streams → grid 3 colunas
+- Modo foco → uma stream em destaque, outras minimizadas
+
+O transmissor também pode assistir outras lives enquanto transmite — sua própria stream aparece em uma janela arrastável (draggable) no canto da tela.
+
+## Como usar
+
+### Transmitir
+
+1. Acesse `/` e clique em **"Iniciar transmissão"**
+2. Escolha a **resolução** (720p ou 1080p) e o **FPS** (5 a 60)
+3. Clique em **"Iniciar transmissão"** e selecione a janela/tela no prompt do navegador
+4. Compartilhe o link ou código que aparece na tela
+
+### Assistir
+
+1. Acesse `/` e cole o link ou código da live no campo de texto
+2. Clique em **"Assistir"**
+3. Use os controles para:
+   - **Volume** — slider na barra inferior do player
+   - **Mudo** — ícone de volume
+   - **Picture-in-Picture** — ícone de PiP (canto inferior direito do player)
+   - **Tela cheia** — ícone de maximizar
+
+### Assistir múltiplas streams
+
+Na página de visualização, use o campo **"Adicionar outra live"** na parte inferior para adicionar mais streams. Cada stream pode ser:
+
+- **Focada** — clica no ícone de expandir para uma ocupar a tela inteira
+- **Removida** — clica no X para sair daquela stream
+
+## Iniciar o projeto
 
 ```bash
+# 1. Clonar
+git clone <url-do-repositorio>
+cd lobby-cast
+
+# 2. Instalar dependências
 pnpm install
+
+# 3. Configurar ambiente
+cp .env.example .env
+# Edite .env com suas credenciais do Cloudflare
+
+# 4. Rodar
 pnpm dev
 ```
 
-# Building For Production
+A aplicação abre em `http://localhost:3000`.
 
-To build this application for production:
+## Self-hosting
+
+O Lobby Cast pode ser hospedado em qualquer lugar que rode Node.js. O único serviço externo necessário é o **Cloudflare Calls** (gratuito para até 1.000 minutos/mês).
+
+### 1. Criar app no Cloudflare Calls
+
+1. Acesse o [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. Vá em **Real-Time** → **Calls** (ou acesse direto em `dash.cloudflare.com/<account-id>/calls`)
+3. Crie um novo **App** — anote o **App ID**
+4. Em **API Tokens**, gere um token com permissão para **Calls** — anote o **API Token**
+
+### 2. Configurar variáveis de ambiente
+
+```bash
+CLOUDFLARE_API_TOKEN=<token gerado no passo 1>
+CLOUDFLARE_CALLS_APP_ID=<App ID do passo 1>
+```
+
+### 3. Deploy com Vercel (mais fácil)
+
+```bash
+# Instalar a CLI
+npm i -g vercel
+
+# Fazer login
+vercel login
+
+# Deploy
+vercel
+
+# Configurar variáveis de ambiente no painel:
+# Settings → Environment Variables
+# Adicione CLOUDFLARE_API_TOKEN e CLOUDFLARE_CALLS_APP_ID
+
+# Deploy em produção
+vercel --prod
+```
+
+O `vercel.json` já está configurado com os rewrites necessários para as rotas do TanStack Router.
+
+### 4. Deploy com Docker
+
+```dockerfile
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
+COPY . .
+RUN pnpm build
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app/.output ./.output
+COPY --from=builder /app/package.json ./
+EXPOSE 3000
+CMD ["node", ".output/server/index.mjs"]
+```
+
+```bash
+docker build -t lobby-cast .
+docker run -p 3000:3000 \
+  -e CLOUDFLARE_API_TOKEN=seu_token \
+  -e CLOUDFLARE_CALLS_APP_ID=seu_app_id \
+  lobby-cast
+```
+
+### 5. Deploy manual (VPS / qualquer servidor)
+
+```bash
+# No servidor
+git clone <url-do-repositorio>
+cd lobby-cast
+pnpm install
+echo "CLOUDFLARE_API_TOKEN=seu_token" > .env
+echo "CLOUDFLARE_CALLS_APP_ID=seu_app_id" >> .env
+pnpm build
+pnpm preview  # ou use um process manager como pm2
+```
+
+Com pm2:
 
 ```bash
 pnpm build
+pm2 start "pnpm preview" --name lobby-cast
+pm2 save
 ```
 
-## Styling
+### Notas sobre self-hosting
 
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
+- O Cloudflare Calls é o único serviço externo. Não precisa de banco de dados, Redis, ou qualquer outro backend.
+- As streams não são gravadas nem armazenadas em lugar nenhum — é tudo em tempo real.
+- O token de API do Cloudflare fica apenas no servidor (nas server functions), nunca exposto ao cliente.
+- Para HTTPS (necessário para `getDisplayMedia` em produção), use um reverse proxy como Caddy ou Nginx com Let's Encrypt.
 
-### Removing Tailwind CSS
+## Stack
 
-If you prefer not to use Tailwind CSS:
+- [TanStack Start](https://tanstack.com/start) — framework React com SSR
+- [TanStack Router](https://tanstack.com/router) — roteamento file-based
+- [Tailwind CSS v4](https://tailwindcss.com/) — estilização
+- [shadcn/ui](https://ui.shadcn.com/) — componentes UI
+- [Cloudflare Calls API](https://developers.cloudflare.com/calls/) — WebRTC signaling
+- [Vite](https://vitejs.dev/) — bundler
+- [Biome](https://biomejs.dev/) — linting e formatação
 
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Remove `@tailwindcss/vite` and `tailwindcss` from `package.json`
+## Estrutura do projeto
 
-## Linting & Formatting
+```
+src/
+├── components/
+│   ├── draggable.tsx       # janela arrastável (PiP da própria stream)
+│   ├── stream-player.tsx   # player WebRTC — conecta, puxa tracks, renderiza vídeo
+│   └── ui/                 # componentes shadcn/ui (button, input, slider, etc.)
+├── lib/
+│   ├── calls.ts            # server functions — proxy para Cloudflare Calls API
+│   ├── stream-layout.ts    # cálculo de larguras para layout multi-stream
+│   └── utils.ts            # utilitários (cn, etc.)
+├── routes/
+│   ├── __root.tsx          # root layout (HTML shell, head, scripts)
+│   ├── index.tsx           # home — iniciar transmissão ou assistir
+│   ├── share.tsx           # transmissão — captura tela, controls, sharing
+│   └── watch.$streamId.tsx # visualização — player + multi-stream
+├── router.tsx              # instância do TanStack Router
+├── routeTree.gen.ts        # árvore de rotas gerada automaticamente
+└── styles.css              # import do Tailwind
+```
 
-This project uses [Biome](https://biomejs.dev/) for linting and formatting. The following scripts are available:
-
+## Comandos
 
 ```bash
-pnpm lint
-pnpm format
-pnpm check
+pnpm dev          # dev server na porta 3000
+pnpm build        # build de produção
+pnpm preview      # preview do build de produção
+pnpm lint         # verificar lint (Biome)
+pnpm format       # formatar código (Biome)
+pnpm check        # lint + format combinados
 ```
-
-
-
-## Routing
-
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router";
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
-
-Here is an example layout that includes a header:
-
-```tsx
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'My App' },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-})
-```
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from '@tanstack/react-start'
-
-const getServerTime = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  return new Date().toISOString()
-})
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState('')
-  
-  useEffect(() => {
-    getServerTime().then(setTime)
-  }, [])
-  
-  return <div>Server time: {time}</div>
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
-
-export const Route = createFileRoute('/api/hello')({
-  server: {
-    handlers: {
-      GET: () => json({ message: 'Hello, World!' }),
-    },
-  },
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/people')({
-  loader: async () => {
-    const response = await fetch('https://swapi.dev/api/people')
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
