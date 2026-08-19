@@ -263,7 +263,7 @@ function Share() {
 			});
 
 			const maxBitrate =
-				fps <= 15 ? 1_000_000 : fps === 60 ? 2_000_000 : 2_500_000;
+				fps <= 15 ? 1_000_000 : fps >= 60 ? 2_000_000 : 1_500_000;
 			const videoTransceiver = transceivers.find(
 				(t) => t.sender.track?.kind === "video",
 			);
