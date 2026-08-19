@@ -262,6 +262,20 @@ function Share() {
 				pc.addEventListener("iceconnectionstatechange", check);
 			});
 
+			const maxBitrate =
+				fps <= 15 ? 1_000_000 : fps === 60 ? 2_000_000 : 2_500_000;
+			const videoTransceiver = transceivers.find(
+				(t) => t.sender.track?.kind === "video",
+			);
+			if (videoTransceiver) {
+				const params = videoTransceiver.sender.getParameters();
+				if (!params.encodings || params.encodings.length === 0) {
+					params.encodings = [{}];
+				}
+				params.encodings[0].maxBitrate = maxBitrate;
+				await videoTransceiver.sender.setParameters(params);
+			}
+
 			setStreamCode(sessionId);
 			setSharing(true);
 		} catch (err) {
