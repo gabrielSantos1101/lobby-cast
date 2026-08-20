@@ -8,6 +8,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Slider } from "#/components/ui/slider";
 import { Toggle } from "#/components/ui/toggle";
+import { ZoomMinimap } from "#/components/zoom-minimap";
+import { useZoomPan } from "#/hooks/use-zoom-pan";
 import { createSession, pullTracks, renegotiate } from "#/lib/calls";
 
 export function StreamPlayer({
@@ -29,6 +31,7 @@ export function StreamPlayer({
 	const [pipSupported] = useState(
 		() => typeof document !== "undefined" && document.pictureInPictureEnabled,
 	);
+	const zoom = useZoomPan();
 
 	useEffect(() => {
 		const video = videoRef.current;
@@ -232,7 +235,12 @@ export function StreamPlayer({
 	return (
 		<div
 			ref={containerRef}
-			className="relative group bg-black rounded-lg overflow-hidden w-full h-full flex items-center justify-center"
+			data-zoom-container
+			onWheel={zoom.onWheel}
+			onPointerDown={zoom.onPointerDown}
+			onPointerMove={zoom.onPointerMove}
+			onPointerUp={zoom.onPointerUp}
+			className={`relative group bg-black rounded-lg overflow-hidden w-full h-full flex items-center justify-center ${zoom.scale > 1 ? "cursor-grab" : ""}`}
 		>
 			{error && (
 				<div className="absolute inset-0 flex items-center justify-center">
@@ -252,6 +260,18 @@ export function StreamPlayer({
 				playsInline
 				muted
 				className="w-full h-full object-contain"
+				style={{
+					transform: `scale(${zoom.scale}) translate(${zoom.translate.x}%, ${zoom.translate.y}%)`,
+					transition: "none",
+				}}
+			/>
+
+			<ZoomMinimap
+				scale={zoom.scale}
+				translateX={zoom.translate.x}
+				translateY={zoom.translate.y}
+				onPanChange={zoom.setPanFromMinimap}
+				onReset={zoom.reset}
 			/>
 
 			<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
