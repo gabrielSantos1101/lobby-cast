@@ -1,5 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Mic, MicOff, Monitor, Volume2, VolumeX } from "lucide-react";
+import {
+	Mic,
+	MicOff,
+	Monitor,
+	Volume2,
+	VolumeX,
+	AlertTriangle,
+} from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { Draggable } from "#/components/draggable";
 import { StreamPlayer } from "#/components/stream-player";
@@ -36,6 +43,7 @@ function Share() {
 	const [newCode, setNewCode] = useState("");
 	const [resolution, setResolution] = useState<"720" | "1080">("1080");
 	const [fps, setFps] = useState(24);
+	const [audioWarning, setAudioWarning] = useState(false);
 
 	const watchingOthers = watchIds.length > 0;
 
@@ -117,6 +125,7 @@ function Share() {
 		setStreamCode(null);
 		setMuted(false);
 		setAudioEnabled(true);
+		setAudioWarning(false);
 		setWatchIds([]);
 	}, []);
 
@@ -150,6 +159,8 @@ function Share() {
 				},
 				audio: true,
 			});
+
+			setAudioWarning(newScreen.getAudioTracks().length === 0);
 
 			const newVideo = newScreen.getVideoTracks()[0];
 			const newAudio = newScreen.getAudioTracks()[0];
@@ -203,6 +214,7 @@ function Share() {
 				audio: true,
 			});
 			streamRef.current = screen;
+			setAudioWarning(screen.getAudioTracks().length === 0);
 
 			screen.getTracks().forEach((track) => {
 				track.addEventListener("ended", () => stopSharing());
@@ -291,7 +303,16 @@ function Share() {
 				<div className="w-full max-w-sm space-y-6">
 					<h1 className="text-2xl font-bold text-center">Lobby Cast</h1>
 
-					{error && <p className="text-red-400 text-sm text-center">{error}</p>}
+						{error && <p className="text-red-400 text-sm text-center">{error}</p>}
+
+						{audioWarning && (
+							<div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+								<AlertTriangle size={16} className="text-amber-400 mt-0.5 shrink-0" />
+								<p className="text-xs text-amber-300">
+									Áudio do sistema não capturado. Ao selecionar a tela/janela para compartilhar, marque a opção <strong>"Compartilhar áudio do sistema"</strong> no navegador.
+								</p>
+							</div>
+						)}
 
 					<div className="flex gap-3">
 						<div className="flex-1 space-y-1">
@@ -511,15 +532,22 @@ function Share() {
 						Trocar tela
 					</Button>
 
-					<Toggle
-						pressed={!audioEnabled}
-						onPressedChange={toggleAudio}
-						variant="outline"
-						size="sm"
-					>
-						{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}
-						{audioEnabled ? "Áudio" : "Sem áudio"}
-					</Toggle>
+					{audioWarning ? (
+						<div className="flex items-center gap-1.5 text-xs text-amber-400" title="Marque 'Compartilhar áudio do sistema' ao selecionar a tela">
+							<AlertTriangle size={14} />
+							Sem áudio
+						</div>
+					) : (
+						<Toggle
+							pressed={!audioEnabled}
+							onPressedChange={toggleAudio}
+							variant="outline"
+							size="sm"
+						>
+							{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}
+							{audioEnabled ? "Áudio" : "Sem áudio"}
+						</Toggle>
+					)}
 
 					<div className="flex-1" />
 
