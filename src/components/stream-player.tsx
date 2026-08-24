@@ -1,4 +1,5 @@
 import {
+	Eye,
 	Maximize,
 	Minimize,
 	PictureInPicture2,
@@ -9,16 +10,25 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Slider } from "#/components/ui/slider";
 import { Toggle } from "#/components/ui/toggle";
 import { ZoomMinimap } from "#/components/zoom-minimap";
+import {
+	formatElapsed,
+	usePresenceHeartbeat,
+	useStreamStatus,
+} from "#/hooks/use-audience";
 import { useZoomPan } from "#/hooks/use-zoom-pan";
 import { createSession, pullTracks, renegotiate } from "#/lib/calls";
 
 export function StreamPlayer({
 	streamId,
+	selfStreamId,
 	size = "normal",
 }: {
 	streamId: string;
+	selfStreamId?: string;
 	size?: "normal" | "mini";
 }) {
+	usePresenceHeartbeat(streamId === selfStreamId ? undefined : streamId);
+	const status = useStreamStatus(streamId);
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const pcRef = useRef<RTCPeerConnection | null>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -137,28 +147,23 @@ export function StreamPlayer({
 					videoRef.current.srcObject = combined;
 				};
 
-				let pullRes;
-				try {
-					pullRes = await pullTracks({
-						data: {
-							sessionId: mySessionId,
-							tracks: [
-								{
-									location: "remote",
-									trackName: "video",
-									sessionId: broadcasterSessionId,
-								},
-								{
-									location: "remote",
-									trackName: "audio",
-									sessionId: broadcasterSessionId,
-								},
-							],
-						},
-					});
-				} catch (e) {
-					throw e;
-				}
+				const pullRes = await pullTracks({
+					data: {
+						sessionId: mySessionId,
+						tracks: [
+							{
+								location: "remote",
+								trackName: "video",
+								sessionId: broadcasterSessionId,
+							},
+							{
+								location: "remote",
+								trackName: "audio",
+								sessionId: broadcasterSessionId,
+							},
+						],
+					},
+				});
 
 				if (pullRes.errorCode) {
 					throw new Error(pullRes.errorDescription ?? "Falha ao puxar tracks");
@@ -204,17 +209,18 @@ export function StreamPlayer({
 					setConnected(true);
 				}
 
-				checkTracks = setInterval(() => {
+				const trackChecker = setInterval(() => {
 					for (const stream of remoteStreams.values()) {
 						for (const track of stream.getTracks()) {
 							if (track.readyState === "ended") {
-								clearInterval(checkTracks!);
+								clearInterval(trackChecker);
 								setError("Transmissão encerrada");
 								return;
 							}
 						}
 					}
 				}, 2000);
+				checkTracks = trackChecker;
 			} catch (err) {
 				if (!cancelled && err instanceof Error) {
 					setError(err.message);
@@ -265,6 +271,24 @@ export function StreamPlayer({
 					transition: "none",
 				}}
 			/>
+
+			{connected &&
+				(status.elapsedMs !== null || status.viewerCount !== null) && (
+					<div className="pointer-events-none absolute top-2 left-2 z-10 flex items-center gap-2.5 rounded-full bg-black/60 border border-white/10 px-2.5 py-1">
+						{status.elapsedMs !== null && (
+							<span className="flex items-center gap-1.5 text-xs text-white">
+								<span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+								{formatElapsed(status.elapsedMs)}
+							</span>
+						)}
+						{status.viewerCount !== null && (
+							<span className="flex items-center gap-1 text-xs text-zinc-300">
+								<Eye size={12} className="text-emerald-400" />
+								{status.viewerCount}
+							</span>
+						)}
+					</div>
+				)}
 
 			<ZoomMinimap
 				scale={zoom.scale}

@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useState } from "react";
 import { Maximize2, Minimize2, X } from "lucide-react";
+import { useCallback, useState } from "react";
 import { StreamPlayer } from "#/components/stream-player";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -42,12 +42,9 @@ function Watch() {
 		[navigate, focusedId],
 	);
 
-	const toggleFocus = useCallback(
-		(id: string) => {
-			setFocusedId((prev) => (prev === id ? null : id));
-		},
-		[],
-	);
+	const toggleFocus = useCallback((id: string) => {
+		setFocusedId((prev) => (prev === id ? null : id));
+	}, []);
 
 	const getWidths = () => {
 		if (focusedId && streamIds.length > 1) {
@@ -58,14 +55,21 @@ function Watch() {
 	};
 
 	const widths = getWidths();
-	const justify = streamIds.length === 3 ? "justify-center" : streamIds.length === 2 ? "justify-center" : "";
+	const justify =
+		streamIds.length === 3
+			? "justify-center"
+			: streamIds.length === 2
+				? "justify-center"
+				: "";
 
 	const isSingle = streamIds.length === 1;
 	const hasMultiple = streamIds.length > 1;
 
 	return (
 		<div className="min-h-screen bg-zinc-950 text-white flex flex-col p-4">
-			<h1 className="text-2xl font-bold text-center mb-4">Assistindo transmissão</h1>
+			<h1 className="text-2xl font-bold text-center mb-4">
+				Assistindo transmissão
+			</h1>
 
 			<div
 				className={`flex flex-wrap gap-4 w-full max-w-7xl mx-auto flex-1 ${justify} ${isSingle || focusedId ? "items-center" : "items-start"}`}
@@ -82,7 +86,11 @@ function Watch() {
 									onClick={() => toggleFocus(id)}
 									className="bg-black/60 hover:bg-black/80 rounded-full p-1 text-white transition-colors"
 								>
-									{focusedId === id ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+									{focusedId === id ? (
+										<Minimize2 size={16} />
+									) : (
+										<Maximize2 size={16} />
+									)}
 								</button>
 							)}
 							<button

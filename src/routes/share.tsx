@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
+	AlertTriangle,
+	Eye,
 	Mic,
 	MicOff,
 	Monitor,
 	Volume2,
 	VolumeX,
-	AlertTriangle,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { Draggable } from "#/components/draggable";
@@ -21,6 +22,7 @@ import {
 } from "#/components/ui/select";
 import { Slider } from "#/components/ui/slider";
 import { Toggle } from "#/components/ui/toggle";
+import { formatElapsed, useAudience } from "#/hooks/use-audience";
 import { createSession, pushTracks } from "#/lib/calls";
 import { getStreamWidths } from "#/lib/stream-layout";
 
@@ -46,6 +48,7 @@ function Share() {
 	const [audioWarning, setAudioWarning] = useState(false);
 
 	const watchingOthers = watchIds.length > 0;
+	const { viewerCount, elapsedMs } = useAudience(sharing ? streamCode : null);
 
 	const syncVideoRef = useCallback((node: HTMLVideoElement | null) => {
 		(videoRef as React.MutableRefObject<HTMLVideoElement | null>).current =
@@ -303,16 +306,21 @@ function Share() {
 				<div className="w-full max-w-sm space-y-6">
 					<h1 className="text-2xl font-bold text-center">Lobby Cast</h1>
 
-						{error && <p className="text-red-400 text-sm text-center">{error}</p>}
+					{error && <p className="text-red-400 text-sm text-center">{error}</p>}
 
-						{audioWarning && (
-							<div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-								<AlertTriangle size={16} className="text-amber-400 mt-0.5 shrink-0" />
-								<p className="text-xs text-amber-300">
-									Áudio do sistema não capturado. Ao selecionar a tela/janela para compartilhar, marque a opção <strong>"Compartilhar áudio do sistema"</strong> no navegador.
-								</p>
-							</div>
-						)}
+					{audioWarning && (
+						<div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+							<AlertTriangle
+								size={16}
+								className="text-amber-400 mt-0.5 shrink-0"
+							/>
+							<p className="text-xs text-amber-300">
+								Áudio do sistema não capturado. Ao selecionar a tela/janela para
+								compartilhar, marque a opção{" "}
+								<strong>"Compartilhar áudio do sistema"</strong> no navegador.
+							</p>
+						</div>
+					)}
 
 					<div className="flex gap-3">
 						<div className="flex-1 space-y-1">
@@ -468,7 +476,10 @@ function Share() {
 					>
 						{watchIds.map((id, i) => (
 							<div key={id} className={`${watchWidths[i]} min-h-[300px]`}>
-								<StreamPlayer streamId={id} />
+								<StreamPlayer
+									streamId={id}
+									selfStreamId={streamCode ?? undefined}
+								/>
 							</div>
 						))}
 					</div>
@@ -533,7 +544,10 @@ function Share() {
 					</Button>
 
 					{audioWarning ? (
-						<div className="flex items-center gap-1.5 text-xs text-amber-400" title="Marque 'Compartilhar áudio do sistema' ao selecionar a tela">
+						<div
+							className="flex items-center gap-1.5 text-xs text-amber-400"
+							title="Marque 'Compartilhar áudio do sistema' ao selecionar a tela"
+						>
 							<AlertTriangle size={14} />
 							Sem áudio
 						</div>
@@ -550,6 +564,26 @@ function Share() {
 					)}
 
 					<div className="flex-1" />
+
+					<div
+						className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800"
+						title={
+							viewerCount === null
+								? "Configure o Supabase para ver espectadores ao vivo"
+								: "Espectadores ao vivo"
+						}
+					>
+						<span className="flex items-center gap-1.5 text-xs text-zinc-300">
+							<span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+							{formatElapsed(elapsedMs)}
+						</span>
+						{viewerCount !== null && (
+							<span className="flex items-center gap-1.5 text-xs text-zinc-300">
+								<Eye size={14} className="text-emerald-400" />
+								{viewerCount} assistindo
+							</span>
+						)}
+					</div>
 
 					<Button
 						variant="secondary"
