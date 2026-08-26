@@ -15,6 +15,16 @@ O fluxo é simples:
 
 Não existe sala, chat ou login. É P2P via Cloudflare como relay — o servidor só faz o signaling (troca de SDP/ICE), o fluxo de mídia vai direto entre os peers.
 
+### Métricas ao vivo (opcional)
+
+Com um projeto gratuito do [Supabase](https://supabase.com) configurado, o app também ganha:
+
+- **Contador de espectadores** em tempo real — polling leve via HTTP, sem WebSocket
+- **Som de entrada/saída** para o transmissor quando alguém entra ou sai da live
+- **Tempo de transmissão** visível para todos — badge no player do espectador e na barra do transmissor
+
+Funciona por heartbeat: cada espectador avisa o Supabase a cada 10s, o transmissor faz polling a cada 5s. Sem Supabase configurado, tudo continua funcionando — os indicadores apenas não aparecem.
+
 ## Arquitetura
 
 ```
@@ -84,6 +94,8 @@ O transmissor também pode assistir outras lives enquanto transmite — sua pró
 3. Clique em **"Iniciar transmissão"** e selecione a janela/tela no prompt do navegador
 4. Compartilhe o link ou código que aparece na tela
 
+Enquanto transmite, a barra inferior mostra o **tempo de live** e quantas pessoas estão assistindo — com som de aviso quando alguém entra ou sai (requer Supabase configurado).
+
 ### Assistir
 
 1. Acesse `/` e cole o link ou código da live no campo de texto
@@ -93,6 +105,7 @@ O transmissor também pode assistir outras lives enquanto transmite — sua pró
    - **Mudo** — ícone de volume
    - **Picture-in-Picture** — ícone de PiP (canto inferior direito do player)
    - **Tela cheia** — ícone de maximizar
+   - **Indicadores ao vivo** — tempo de transmissão e número de espectadores no canto superior do player
 
 ### Assistir múltiplas streams
 
@@ -139,7 +152,24 @@ CLOUDFLARE_API_TOKEN=<token gerado no passo 1>
 CLOUDFLARE_CALLS_APP_ID=<App ID do passo 1>
 ```
 
-### 3. Deploy com Vercel (mais fácil)
+### 3. (Opcional) Supabase — métricas ao vivo
+
+O contador de espectadores, os sons de entrada/saída e o tempo de live dependem de um projeto do [Supabase](https://supabase.com) — o plano gratuito serve:
+
+1. Crie um projeto no Supabase
+2. Abra o **SQL Editor** e execute o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) — cria as tabelas `presence` e `streams` com as policies de RLS
+3. Em **Project Settings → API Keys**, copie a **Project URL** e a chave **publishable/anon**
+
+Adicione ao `.env`:
+
+```bash
+VITE_SUPABASE_URL=https://seu-projeto.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_xxx
+```
+
+> A chave publishable/anon é pública por design — quem protege os dados são as policies RLS do schema. Nunca use a chave `service_role`/`secret` no cliente.
+
+### 4. Deploy com Vercel (mais fácil)
 
 ```bash
 # Instalar a CLI
@@ -154,6 +184,7 @@ vercel
 # Configurar variáveis de ambiente no painel:
 # Settings → Environment Variables
 # Adicione CLOUDFLARE_API_TOKEN e CLOUDFLARE_CALLS_APP_ID
+# (e as VITE_SUPABASE_* se for usar as métricas ao vivo)
 
 # Deploy em produção
 vercel --prod
@@ -161,7 +192,7 @@ vercel --prod
 
 O `vercel.json` já está configurado com os rewrites necessários para as rotas do TanStack Router.
 
-### 4. Deploy com Docker
+### 5. Deploy com Docker
 
 ```dockerfile
 FROM node:20-alpine AS builder
@@ -187,7 +218,7 @@ docker run -p 3000:3000 \
   lobby-cast
 ```
 
-### 5. Deploy manual (VPS / qualquer servidor)
+### 6. Deploy manual (VPS / qualquer servidor)
 
 ```bash
 # No servidor
@@ -210,7 +241,8 @@ pm2 save
 
 ### Notas sobre self-hosting
 
-- O Cloudflare Calls é o único serviço externo. Não precisa de banco de dados, Redis, ou qualquer outro backend.
+- O Cloudflare Calls é o único serviço **obrigatório** — não precisa de banco de dados nem Redis para o funcionamento básico.
+- O Supabase é opcional (métricas ao vivo). No plano gratuito, o projeto pausa após ~7 dias sem uso — basta reativar no dashboard.
 - As streams não são gravadas nem armazenadas em lugar nenhum — é tudo em tempo real.
 - O token de API do Cloudflare fica apenas no servidor (nas server functions), nunca exposto ao cliente.
 - Para HTTPS (necessário para `getDisplayMedia` em produção), use um reverse proxy como Caddy ou Nginx com Let's Encrypt.
@@ -222,6 +254,7 @@ pm2 save
 - [Tailwind CSS v4](https://tailwindcss.com/) — estilização
 - [shadcn/ui](https://ui.shadcn.com/) — componentes UI
 - [Cloudflare Calls API](https://developers.cloudflare.com/calls/) — WebRTC signaling
+- [Supabase](https://supabase.com) — presença ao vivo (opcional): contador de espectadores, tempo de live e sons
 - [Vite](https://vitejs.dev/) — bundler
 - [Biome](https://biomejs.dev/) — linting e formatação
 
@@ -229,22 +262,31 @@ pm2 save
 
 ```
 src/
+├── assets/
+│   ├── Join.mp3             # som de novo espectador
+│   └── Leave.mp3            # som de saída de espectador
 ├── components/
-│   ├── draggable.tsx       # janela arrastável (PiP da própria stream)
-│   ├── stream-player.tsx   # player WebRTC — conecta, puxa tracks, renderiza vídeo
-│   └── ui/                 # componentes shadcn/ui (button, input, slider, etc.)
+│   ├── draggable.tsx        # janela arrastável (PiP da própria stream)
+│   ├── stream-player.tsx    # player WebRTC — conecta, puxa tracks, renderiza vídeo
+│   └── ui/                  # componentes shadcn/ui (button, input, slider, etc.)
+├── hooks/
+│   ├── use-audience.ts      # heartbeat, contagem, tempo de live e sons
+│   └── use-zoom-pan.ts      # zoom/pan do player
 ├── lib/
-│   ├── calls.ts            # server functions — proxy para Cloudflare Calls API
-│   ├── stream-layout.ts    # cálculo de larguras para layout multi-stream
-│   └── utils.ts            # utilitários (cn, etc.)
+│   ├── calls.ts             # server functions — proxy para Cloudflare Calls API
+│   ├── presence.ts          # client Supabase — heartbeat, presença e sons
+│   ├── stream-layout.ts     # cálculo de larguras para layout multi-stream
+│   └── utils.ts             # utilitários (cn, etc.)
 ├── routes/
-│   ├── __root.tsx          # root layout (HTML shell, head, scripts)
-│   ├── index.tsx           # home — iniciar transmissão ou assistir
-│   ├── share.tsx           # transmissão — captura tela, controls, sharing
-│   └── watch.$streamId.tsx # visualização — player + multi-stream
-├── router.tsx              # instância do TanStack Router
-├── routeTree.gen.ts        # árvore de rotas gerada automaticamente
-└── styles.css              # import do Tailwind
+│   ├── __root.tsx           # root layout (HTML shell, head, scripts)
+│   ├── index.tsx            # home — iniciar transmissão ou assistir
+│   ├── share.tsx            # transmissão — captura tela, controls, sharing
+│   └── watch.$streamId.tsx  # visualização — player + multi-stream
+├── router.tsx               # instância do TanStack Router
+├── routeTree.gen.ts         # árvore de rotas gerada automaticamente
+└── styles.css               # import do Tailwind
+supabase/
+└── schema.sql               # tabelas presence/streams + policies RLS
 ```
 
 ## Comandos
