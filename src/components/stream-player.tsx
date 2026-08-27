@@ -34,7 +34,7 @@ export function StreamPlayer({
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [connected, setConnected] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [muted, setMuted] = useState(false);
+	const [muted, setMuted] = useState(true);
 	const [volume, setVolume] = useState(1);
 	const [isPip, setIsPip] = useState(false);
 	const [fullscreen, setFullscreen] = useState(false);
