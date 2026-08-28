@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
 	AlertTriangle,
+	Camera,
 	Eye,
 	Mic,
 	MicOff,
@@ -46,6 +47,7 @@ function Share() {
 	const [resolution, setResolution] = useState<"720" | "1080">("1080");
 	const [fps, setFps] = useState(24);
 	const [audioWarning, setAudioWarning] = useState(false);
+	const [cameraMode, setCameraMode] = useState(false);
 
 	const watchingOthers = watchIds.length > 0;
 	const { viewerCount, elapsedMs } = useAudience(sharing ? streamCode : null);
@@ -129,6 +131,7 @@ function Share() {
 		setMuted(false);
 		setAudioEnabled(true);
 		setAudioWarning(false);
+		setCameraMode(false);
 		setWatchIds([]);
 	}, []);
 
@@ -203,6 +206,80 @@ function Share() {
 			}
 		}
 	}, [resolution, fps, audioEnabled, stopSharing]);
+
+	const changeSource = useCallback(async () => {
+		try {
+			setError(null);
+			const pc = pcRef.current;
+			const oldStream = streamRef.current;
+			const transceivers = transceiversRef.current;
+			if (!pc || !oldStream || !transceivers) return;
+
+			const newMode = !cameraMode;
+
+			const newStream = newMode
+				? await navigator.mediaDevices.getUserMedia({
+						video: {
+							width: { ideal: Number(resolution) === 720 ? 1280 : 1920 },
+							height: { ideal: Number(resolution) },
+							frameRate: { ideal: fps },
+						},
+						audio: false,
+					})
+				: await navigator.mediaDevices.getDisplayMedia({
+						video: {
+							width: { ideal: Number(resolution) === 720 ? 1280 : 1920 },
+							height: { ideal: Number(resolution) },
+							frameRate: { ideal: fps },
+						},
+						audio: true,
+					});
+
+			setAudioWarning(!newMode && newStream.getAudioTracks().length === 0);
+
+			const newVideo = newStream.getVideoTracks()[0];
+			const newAudio = newMode ? oldStream.getAudioTracks()[0] : newStream.getAudioTracks()[0];
+
+			const videoTransceiver = transceivers.find(
+				(t) => t.sender.track?.kind === "video",
+			);
+			if (videoTransceiver && newVideo) {
+				await videoTransceiver.sender.replaceTrack(newVideo);
+			}
+
+			const audioTransceiver = transceivers.find(
+				(t) => t.sender.track?.kind === "audio",
+			);
+			if (audioTransceiver && newAudio && audioEnabled) {
+				await audioTransceiver.sender.replaceTrack(newAudio);
+			}
+
+			for (const t of oldStream.getVideoTracks()) t.stop();
+			if (!newMode) {
+				for (const t of newStream.getAudioTracks()) t.stop();
+			}
+
+			const combined = new MediaStream([
+				...(newVideo ? [newVideo] : []),
+				...(newAudio ? [newAudio] : []),
+			]);
+			streamRef.current = combined;
+
+			if (videoRef.current) {
+				videoRef.current.srcObject = combined;
+			}
+
+			combined.getVideoTracks().forEach((track) => {
+				track.addEventListener("ended", () => stopSharing());
+			});
+
+			setCameraMode(newMode);
+		} catch (err) {
+			if (err instanceof Error && err.name !== "AbortError") {
+				setError(err.message);
+			}
+		}
+	}, [cameraMode, resolution, fps, audioEnabled, stopSharing]);
 
 	const startSharing = useCallback(async () => {
 		try {
@@ -541,6 +618,11 @@ function Share() {
 					<Button variant="secondary" size="sm" onClick={changeScreen}>
 						<Monitor size={14} />
 						Trocar tela
+					</Button>
+
+					<Button variant="secondary" size="sm" onClick={changeSource}>
+						<Camera size={14} />
+						{cameraMode ? "Voltar para tela" : "Câmera"}
 					</Button>
 
 					{audioWarning ? (
