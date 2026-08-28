@@ -59,7 +59,7 @@ function Share() {
 	const [resolution, setResolution] = useState<"720" | "1080">("1080");
 	const [fps, setFps] = useState(24);
 	const [audioWarning, setAudioWarning] = useState(false);
-	const [cameraMode, setCameraMode] = useState(false);
+	const [webcamMode, setWebcamMode] = useState(false);
 	const [micEnabled, setMicEnabled] = useState(false);
 
 	const watchingOthers = watchIds.length > 0;
@@ -207,7 +207,7 @@ function Share() {
 		setMuted(false);
 		setAudioEnabled(true);
 		setAudioWarning(false);
-		setCameraMode(false);
+		setWebcamMode(false);
 		setMicEnabled(false);
 		setWatchIds([]);
 	}, []);
@@ -280,7 +280,7 @@ function Share() {
 				track.addEventListener("ended", () => stopSharing());
 			});
 
-			setCameraMode(false);
+			setWebcamMode(false);
 		} catch (err) {
 			if (err instanceof Error && err.name !== "AbortError") {
 				setError(err.message);
@@ -288,7 +288,7 @@ function Share() {
 		}
 	}, [resolution, fps, stopSharing, ensureAudioMix]);
 
-	const changeSource = useCallback(async () => {
+	const toggleWebcam = useCallback(async () => {
 		try {
 			setError(null);
 			const pc = pcRef.current;
@@ -296,9 +296,9 @@ function Share() {
 			const transceivers = transceiversRef.current;
 			if (!pc || !oldStream || !transceivers) return;
 
-			const newMode = !cameraMode;
+			const showWebcam = !webcamMode;
 
-			const newStream = newMode
+			const newStream = showWebcam
 				? await navigator.mediaDevices.getUserMedia({
 						video: {
 							width: { ideal: Number(resolution) === 720 ? 1280 : 1920 },
@@ -316,11 +316,11 @@ function Share() {
 						audio: true,
 					});
 
-			setAudioWarning(!newMode && newStream.getAudioTracks().length === 0);
+			setAudioWarning(!showWebcam && newStream.getAudioTracks().length === 0);
 
 			const newVideo = newStream.getVideoTracks()[0];
-			const newAudio = newMode ? oldStream.getAudioTracks()[0] : newStream.getAudioTracks()[0];
-			const mixedTrack = newMode ? null : ensureAudioMix(newAudio);
+			const newAudio = showWebcam ? oldStream.getAudioTracks()[0] : newStream.getAudioTracks()[0];
+			const mixedTrack = showWebcam ? null : ensureAudioMix(newAudio);
 
 			const videoTransceiver = transceivers.find(
 				(t) => t.sender.track?.kind === "video",
@@ -352,13 +352,13 @@ function Share() {
 				track.addEventListener("ended", () => stopSharing());
 			});
 
-			setCameraMode(newMode);
+			setWebcamMode(showWebcam);
 		} catch (err) {
 			if (err instanceof Error && err.name !== "AbortError") {
 				setError(err.message);
 			}
 		}
-	}, [cameraMode, resolution, fps, stopSharing, ensureAudioMix]);
+	}, [webcamMode, resolution, fps, stopSharing, ensureAudioMix]);
 
 	const startSharing = useCallback(async () => {
 		try {
@@ -710,9 +710,9 @@ function Share() {
 						Trocar tela
 					</Button>
 
-					<Button variant="secondary" size="sm" onClick={changeSource}>
+					<Button variant="secondary" size="sm" onClick={toggleWebcam}>
 						<Camera size={14} />
-						{cameraMode ? "Voltar para tela" : "Câmera"}
+						{webcamMode ? "Voltar para tela" : "Câmera"}
 					</Button>
 
 					{audioWarning ? (
