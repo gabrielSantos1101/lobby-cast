@@ -41,6 +41,18 @@ function Share() {
 	const pcRef = useRef<RTCPeerConnection | null>(null);
 	const streamRef = useRef<MediaStream | null>(null);
 	const transceiversRef = useRef<RTCRtpTransceiver[] | null>(null);
+	const audioMixRef = useRef<{
+		ctx: AudioContext;
+		dest: MediaStreamAudioDestinationNode;
+		sysSource: MediaStreamAudioSourceNode | null;
+		micSource: MediaStreamAudioSourceNode | null;
+		sysTrack: MediaStreamTrack | null;
+		sysConnected: boolean;
+		micConnected: boolean;
+	} | null>(null);
+	const micStreamRef = useRef<MediaStream | null>(null);
+	const audioEnabledRef = useRef(true);
+	const micActiveRef = useRef(false);
 
 	const [watchIds, setWatchIds] = useState<string[]>([]);
 	const [newCode, setNewCode] = useState("");
@@ -48,6 +60,7 @@ function Share() {
 	const [fps, setFps] = useState(24);
 	const [audioWarning, setAudioWarning] = useState(false);
 	const [cameraMode, setCameraMode] = useState(false);
+	const [micEnabled, setMicEnabled] = useState(false);
 
 	const watchingOthers = watchIds.length > 0;
 	const { viewerCount, elapsedMs } = useAudience(sharing ? streamCode : null);
@@ -78,60 +91,124 @@ function Share() {
 		setMuted(newMuted);
 	}, [muted]);
 
-	const toggleAudio = useCallback(() => {
-		const stream = streamRef.current;
-		const transceivers = transceiversRef.current;
-		const pc = pcRef.current;
-		if (!stream || !transceivers || !pc) return;
-
-		const newEnabled = !audioEnabled;
-
-		if (newEnabled) {
-			stream.getAudioTracks().forEach((track) => {
-				track.enabled = true;
-			});
-			const audioTrack = stream.getAudioTracks()[0];
-			if (audioTrack) {
-				const audioTransceiver = transceivers.find(
-					(t) => t.sender.track?.kind === "audio",
-				);
-				if (audioTransceiver) {
-					audioTransceiver.sender.replaceTrack(audioTrack);
-				}
-			}
-		} else {
+	const ensureAudioMix = useCallback((sysTrack: MediaStreamTrack | null) => {
+		if (!sysTrack) return null;
+		let mix = audioMixRef.current;
+		if (!mix) {
 			const ctx = new AudioContext();
-			const silentTrack = ctx
-				.createMediaStreamDestination()
-				.stream.getAudioTracks()[0];
-			const audioTransceiver = transceivers.find(
-				(t) => t.sender.track?.kind === "audio",
-			);
-			if (audioTransceiver) {
-				audioTransceiver.sender.replaceTrack(silentTrack);
-			}
-			stream.getAudioTracks().forEach((track) => {
-				track.enabled = false;
-			});
+			const dest = ctx.createMediaStreamDestination();
+			mix = {
+				ctx,
+				dest,
+				sysSource: null,
+				micSource: null,
+				sysTrack: null,
+				sysConnected: false,
+				micConnected: false,
+			};
+			audioMixRef.current = mix;
 		}
+		if (mix.sysTrack !== sysTrack) {
+			if (mix.sysSource) mix.sysSource.disconnect();
+			mix.sysSource = mix.ctx.createMediaStreamSource(new MediaStream([sysTrack]));
+			if (mix.sysTrack) mix.sysTrack.stop();
+			mix.sysTrack = sysTrack;
+			mix.sysConnected = false;
+		}
+		return mix.dest.stream.getAudioTracks()[0];
+	}, []);
 
+	const syncAudioConnections = useCallback(() => {
+		const mix = audioMixRef.current;
+		if (!mix) return;
+		const sysOn = audioEnabledRef.current && mix.sysSource !== null;
+		const micOn = micActiveRef.current && mix.micSource !== null && sysOn;
+
+		if (mix.sysSource) {
+			if (sysOn && !mix.sysConnected) {
+				mix.sysSource.connect(mix.dest);
+				mix.sysConnected = true;
+			} else if (!sysOn && mix.sysConnected) {
+				mix.sysSource.disconnect();
+				mix.sysConnected = false;
+			}
+		}
+		if (mix.micSource) {
+			if (micOn && !mix.micConnected) {
+				mix.micSource.connect(mix.dest);
+				mix.micConnected = true;
+			} else if (!micOn && mix.micConnected) {
+				mix.micSource.disconnect();
+				mix.micConnected = false;
+			}
+		}
+	}, []);
+
+	const toggleAudio = useCallback(() => {
+		const newEnabled = !audioEnabled;
+		audioEnabledRef.current = newEnabled;
+		syncAudioConnections();
 		setAudioEnabled(newEnabled);
-	}, [audioEnabled]);
+	}, [audioEnabled, syncAudioConnections]);
+
+	const toggleMic = useCallback(async () => {
+		const newEnabled = !micEnabled;
+		const mix = audioMixRef.current;
+		if (newEnabled) {
+			if (!mix || !audioEnabledRef.current) return;
+			if (!micStreamRef.current) {
+				micStreamRef.current = await navigator.mediaDevices.getUserMedia({
+					video: false,
+					audio: true,
+				});
+			}
+			if (!mix.micSource) {
+				mix.micSource = mix.ctx.createMediaStreamSource(micStreamRef.current);
+			}
+			micActiveRef.current = true;
+			syncAudioConnections();
+			setMicEnabled(true);
+		} else {
+			micActiveRef.current = false;
+			syncAudioConnections();
+			if (mix?.micSource) {
+				mix.micSource.disconnect();
+				mix.micSource = null;
+				mix.micConnected = false;
+			}
+			micStreamRef.current?.getTracks().forEach((t) => t.stop());
+			micStreamRef.current = null;
+			setMicEnabled(false);
+		}
+	}, [micEnabled, syncAudioConnections]);
 
 	const stopSharing = useCallback(() => {
 		pcRef.current?.close();
 		streamRef.current?.getTracks().forEach((t) => {
 			t.stop();
 		});
+		const mix = audioMixRef.current;
+		if (mix) {
+			mix.sysSource?.disconnect();
+			mix.micSource?.disconnect();
+			mix.sysTrack?.stop();
+			mix.ctx.close();
+		}
+		micStreamRef.current?.getTracks().forEach((t) => t.stop());
 		pcRef.current = null;
 		streamRef.current = null;
 		transceiversRef.current = null;
+		audioMixRef.current = null;
+		micStreamRef.current = null;
+		audioEnabledRef.current = true;
+		micActiveRef.current = false;
 		setSharing(false);
 		setStreamCode(null);
 		setMuted(false);
 		setAudioEnabled(true);
 		setAudioWarning(false);
 		setCameraMode(false);
+		setMicEnabled(false);
 		setWatchIds([]);
 	}, []);
 
@@ -171,6 +248,8 @@ function Share() {
 			const newVideo = newScreen.getVideoTracks()[0];
 			const newAudio = newScreen.getAudioTracks()[0];
 
+			const mixedTrack = ensureAudioMix(newAudio);
+
 			const videoTransceiver = transceivers.find(
 				(t) => t.sender.track?.kind === "video",
 			);
@@ -181,11 +260,11 @@ function Share() {
 			const audioTransceiver = transceivers.find(
 				(t) => t.sender.track?.kind === "audio",
 			);
-			if (audioTransceiver && newAudio && audioEnabled) {
-				await audioTransceiver.sender.replaceTrack(newAudio);
+			if (audioTransceiver && mixedTrack) {
+				await audioTransceiver.sender.replaceTrack(mixedTrack);
 			}
 
-			for (const t of oldStream.getTracks()) t.stop();
+			for (const t of oldStream.getVideoTracks()) t.stop();
 
 			const combined = new MediaStream([
 				...(newVideo ? [newVideo] : []),
@@ -200,12 +279,14 @@ function Share() {
 			combined.getTracks().forEach((track) => {
 				track.addEventListener("ended", () => stopSharing());
 			});
+
+			setCameraMode(false);
 		} catch (err) {
 			if (err instanceof Error && err.name !== "AbortError") {
 				setError(err.message);
 			}
 		}
-	}, [resolution, fps, audioEnabled, stopSharing]);
+	}, [resolution, fps, stopSharing, ensureAudioMix]);
 
 	const changeSource = useCallback(async () => {
 		try {
@@ -239,6 +320,7 @@ function Share() {
 
 			const newVideo = newStream.getVideoTracks()[0];
 			const newAudio = newMode ? oldStream.getAudioTracks()[0] : newStream.getAudioTracks()[0];
+			const mixedTrack = newMode ? null : ensureAudioMix(newAudio);
 
 			const videoTransceiver = transceivers.find(
 				(t) => t.sender.track?.kind === "video",
@@ -250,14 +332,11 @@ function Share() {
 			const audioTransceiver = transceivers.find(
 				(t) => t.sender.track?.kind === "audio",
 			);
-			if (audioTransceiver && newAudio && audioEnabled) {
-				await audioTransceiver.sender.replaceTrack(newAudio);
+			if (audioTransceiver && mixedTrack) {
+				await audioTransceiver.sender.replaceTrack(mixedTrack);
 			}
 
 			for (const t of oldStream.getVideoTracks()) t.stop();
-			if (!newMode) {
-				for (const t of newStream.getAudioTracks()) t.stop();
-			}
 
 			const combined = new MediaStream([
 				...(newVideo ? [newVideo] : []),
@@ -279,7 +358,7 @@ function Share() {
 				setError(err.message);
 			}
 		}
-	}, [cameraMode, resolution, fps, audioEnabled, stopSharing]);
+	}, [cameraMode, resolution, fps, stopSharing, ensureAudioMix]);
 
 	const startSharing = useCallback(async () => {
 		try {
@@ -320,6 +399,17 @@ function Share() {
 				.getTracks()
 				.map((track) => pc.addTransceiver(track, { direction: "sendonly" }));
 			transceiversRef.current = transceivers;
+
+			const screenAudio = screen.getAudioTracks()[0];
+			const mixedTrack = ensureAudioMix(screenAudio);
+			if (mixedTrack) {
+				const audioTransceiver = transceivers.find(
+					(t) => t.sender.track?.kind === "audio",
+				);
+				if (audioTransceiver) {
+					await audioTransceiver.sender.replaceTrack(mixedTrack);
+				}
+			}
 
 			const offer = await pc.createOffer();
 			await pc.setLocalDescription(offer);
@@ -375,7 +465,7 @@ function Share() {
 				setError(err.message);
 			}
 		}
-	}, [stopSharing, resolution, fps]);
+	}, [stopSharing, resolution, fps, ensureAudioMix]);
 
 	if (!sharing) {
 		return (
@@ -634,15 +724,27 @@ function Share() {
 							Sem áudio
 						</div>
 					) : (
-						<Toggle
-							pressed={!audioEnabled}
-							onPressedChange={toggleAudio}
-							variant="outline"
-							size="sm"
-						>
-							{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}
-							{audioEnabled ? "Áudio" : "Sem áudio"}
-						</Toggle>
+						<>
+							<Toggle
+								pressed={!audioEnabled}
+								onPressedChange={toggleAudio}
+								variant="outline"
+								size="sm"
+							>
+								{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}
+								{audioEnabled ? "Áudio" : "Sem áudio"}
+							</Toggle>
+							<Toggle
+								pressed={micEnabled}
+								onPressedChange={toggleMic}
+								variant="outline"
+								size="sm"
+								disabled={!audioEnabled}
+							>
+								{micEnabled ? <Mic size={14} /> : <MicOff size={14} />}
+								Mic
+							</Toggle>
+						</>
 					)}
 
 					<div className="flex-1" />
