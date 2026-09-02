@@ -10,6 +10,16 @@ export const Route = createFileRoute("/watch/$streamId")({
 	component: Watch,
 });
 
+function extractStreamId(input: string): string {
+	const trimmed = input.trim();
+	const watchPrefix = "/watch/";
+	if (trimmed.includes(watchPrefix)) {
+		const idx = trimmed.indexOf(watchPrefix);
+		return trimmed.slice(idx + watchPrefix.length).split(/[?#]/)[0] ?? "";
+	}
+	return trimmed;
+}
+
 function Watch() {
 	const { streamId: initialStreamId } = Route.useParams();
 	const navigate = useNavigate();
@@ -18,7 +28,7 @@ function Watch() {
 	const [newCode, setNewCode] = useState("");
 
 	const addStream = useCallback(() => {
-		const code = newCode.trim();
+		const code = extractStreamId(newCode);
 		if (code && !streamIds.includes(code)) {
 			setStreamIds((prev) => [...prev, code]);
 			setNewCode("");

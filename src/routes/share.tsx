@@ -29,6 +29,16 @@ import { getStreamWidths } from "#/lib/stream-layout";
 
 export const Route = createFileRoute("/share")({ component: Share });
 
+function extractStreamId(input: string): string {
+	const trimmed = input.trim();
+	const watchPrefix = "/watch/";
+	if (trimmed.includes(watchPrefix)) {
+		const idx = trimmed.indexOf(watchPrefix);
+		return trimmed.slice(idx + watchPrefix.length).split(/[?#]/)[0] ?? "";
+	}
+	return trimmed;
+}
+
 function Share() {
 	const navigate = useNavigate();
 	const [streamCode, setStreamCode] = useState<string | null>(null);
@@ -74,7 +84,7 @@ function Share() {
 	}, []);
 
 	const addWatch = useCallback(() => {
-		const code = newCode.trim();
+		const code = extractStreamId(newCode);
 		if (code && !watchIds.includes(code)) {
 			setWatchIds((prev) => [...prev, code]);
 			setNewCode("");
@@ -92,7 +102,6 @@ function Share() {
 	}, [muted]);
 
 	const ensureAudioMix = useCallback((sysTrack: MediaStreamTrack | null) => {
-		if (!sysTrack) return null;
 		let mix = audioMixRef.current;
 		if (!mix) {
 			const ctx = new AudioContext();
@@ -110,10 +119,15 @@ function Share() {
 		}
 		if (mix.sysTrack !== sysTrack) {
 			if (mix.sysSource) mix.sysSource.disconnect();
-			mix.sysSource = mix.ctx.createMediaStreamSource(new MediaStream([sysTrack]));
+			mix.sysSource = sysTrack
+				? mix.ctx.createMediaStreamSource(new MediaStream([sysTrack]))
+				: null;
 			if (mix.sysTrack) mix.sysTrack.stop();
 			mix.sysTrack = sysTrack;
 			mix.sysConnected = false;
+		}
+		if (mix.ctx.state === "suspended") {
+			void mix.ctx.resume().catch(() => {});
 		}
 		return mix.dest.stream.getAudioTracks()[0];
 	}, []);
@@ -122,7 +136,8 @@ function Share() {
 		const mix = audioMixRef.current;
 		if (!mix) return;
 		const sysOn = audioEnabledRef.current && mix.sysSource !== null;
-		const micOn = micActiveRef.current && mix.micSource !== null && sysOn;
+		const micOn =
+			micActiveRef.current && mix.micSource !== null && audioEnabledRef.current;
 
 		if (mix.sysSource) {
 			if (sysOn && !mix.sysConnected) {
@@ -248,7 +263,8 @@ function Share() {
 			const newVideo = newScreen.getVideoTracks()[0];
 			const newAudio = newScreen.getAudioTracks()[0];
 
-			const mixedTrack = ensureAudioMix(newAudio);
+			const mixedTrack = ensureAudioMix(newAudio ?? null);
+			syncAudioConnections();
 
 			const videoTransceiver = transceivers.find(
 				(t) => t.sender.track?.kind === "video",
@@ -286,7 +302,7 @@ function Share() {
 				setError(err.message);
 			}
 		}
-	}, [resolution, fps, stopSharing, ensureAudioMix]);
+	}, [resolution, fps, stopSharing, ensureAudioMix, syncAudioConnections]);
 
 	const toggleWebcam = useCallback(async () => {
 		try {
@@ -319,8 +335,11 @@ function Share() {
 			setAudioWarning(!showWebcam && newStream.getAudioTracks().length === 0);
 
 			const newVideo = newStream.getVideoTracks()[0];
-			const newAudio = showWebcam ? oldStream.getAudioTracks()[0] : newStream.getAudioTracks()[0];
-			const mixedTrack = showWebcam ? null : ensureAudioMix(newAudio);
+			const newAudio = showWebcam
+				? oldStream.getAudioTracks()[0]
+				: newStream.getAudioTracks()[0];
+			const mixedTrack = showWebcam ? null : ensureAudioMix(newAudio ?? null);
+			syncAudioConnections();
 
 			const videoTransceiver = transceivers.find(
 				(t) => t.sender.track?.kind === "video",
@@ -358,7 +377,7 @@ function Share() {
 				setError(err.message);
 			}
 		}
-	}, [webcamMode, resolution, fps, stopSharing, ensureAudioMix]);
+	}, [webcamMode, resolution, fps, stopSharing, ensureAudioMix, syncAudioConnections]);
 
 	const startSharing = useCallback(async () => {
 		try {
@@ -395,21 +414,16 @@ function Share() {
 			});
 			pcRef.current = pc;
 
-			const transceivers = screen
-				.getTracks()
-				.map((track) => pc.addTransceiver(track, { direction: "sendonly" }));
-			transceiversRef.current = transceivers;
-
 			const screenAudio = screen.getAudioTracks()[0];
-			const mixedTrack = ensureAudioMix(screenAudio);
-			if (mixedTrack) {
-				const audioTransceiver = transceivers.find(
-					(t) => t.sender.track?.kind === "audio",
-				);
-				if (audioTransceiver) {
-					await audioTransceiver.sender.replaceTrack(mixedTrack);
-				}
-			}
+			const mixedTrack = ensureAudioMix(screenAudio ?? null);
+			syncAudioConnections();
+			const transceivers = [
+				...screen
+					.getVideoTracks()
+					.map((track) => pc.addTransceiver(track, { direction: "sendonly" })),
+				pc.addTransceiver(mixedTrack, { direction: "sendonly" }),
+			];
+			transceiversRef.current = transceivers;
 
 			const offer = await pc.createOffer();
 			await pc.setLocalDescription(offer);
@@ -465,7 +479,7 @@ function Share() {
 				setError(err.message);
 			}
 		}
-	}, [stopSharing, resolution, fps, ensureAudioMix]);
+	}, [stopSharing, resolution, fps, ensureAudioMix, syncAudioConnections]);
 
 	if (!sharing) {
 		return (
@@ -547,7 +561,7 @@ function Share() {
 						<Button
 							variant="secondary"
 							onClick={() => {
-								const code = newCode.trim();
+								const code = extractStreamId(newCode);
 								if (code) {
 									navigate({
 										to: "/watch/$streamId",
@@ -715,38 +729,34 @@ function Share() {
 						{webcamMode ? "Voltar para tela" : "Câmera"}
 					</Button>
 
-					{audioWarning ? (
+					{audioWarning && (
 						<div
 							className="flex items-center gap-1.5 text-xs text-amber-400"
-							title="Marque 'Compartilhar áudio do sistema' ao selecionar a tela"
+							title="O Firefox pode não disponibilizar áudio do sistema ao compartilhar tela. Use o mic como fallback."
 						>
 							<AlertTriangle size={14} />
 							Sem áudio
 						</div>
-					) : (
-						<>
-							<Toggle
-								pressed={!audioEnabled}
-								onPressedChange={toggleAudio}
-								variant="outline"
-								size="sm"
-							>
-								{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}
-								{audioEnabled ? "Áudio" : "Sem áudio"}
-							</Toggle>
-							<Toggle
-								pressed={micEnabled}
-								onPressedChange={toggleMic}
-								variant="outline"
-								size="sm"
-								disabled={!audioEnabled}
-							>
-								{micEnabled ? <Mic size={14} /> : <MicOff size={14} />}
-								Mic
-							</Toggle>
-						</>
 					)}
-
+					<Toggle
+						pressed={!audioEnabled}
+						onPressedChange={toggleAudio}
+						variant="outline"
+						size="sm"
+					>
+						{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}
+						{audioEnabled ? "Áudio" : "Sem áudio"}
+					</Toggle>
+					<Toggle
+						pressed={micEnabled}
+						onPressedChange={toggleMic}
+						variant="outline"
+						size="sm"
+						disabled={!audioEnabled}
+					>
+						{micEnabled ? <Mic size={14} /> : <MicOff size={14} />}
+						Mic
+					</Toggle>
 					<div className="flex-1" />
 
 					<div

@@ -10,7 +10,7 @@ function extractStreamId(input: string): string {
 	const watchPrefix = "/watch/";
 	if (trimmed.includes(watchPrefix)) {
 		const idx = trimmed.indexOf(watchPrefix);
-		return trimmed.slice(idx + watchPrefix.length);
+		return trimmed.slice(idx + watchPrefix.length).split(/[?#]/)[0] ?? "";
 	}
 	return trimmed;
 }
