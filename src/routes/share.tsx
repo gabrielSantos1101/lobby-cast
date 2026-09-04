@@ -30,15 +30,46 @@ import { getStreamWidths } from "#/lib/stream-layout";
 export const Route = createFileRoute("/share")({ component: Share });
 
 function extractStreamId(input: string): string {
-	const trimmed = input.trim();
-	const watchPrefix = "/watch/";
-	if (trimmed.includes(watchPrefix)) {
-		const idx = trimmed.indexOf(watchPrefix);
-		return trimmed.slice(idx + watchPrefix.length).split(/[?#]/)[0] ?? "";
-	}
-	return trimmed;
+  const trimmed = input.trim();
+  const watchPrefix = "/watch/";
+  if (trimmed.includes(watchPrefix)) {
+    const idx = trimmed.indexOf(watchPrefix);
+    return trimmed.slice(idx + watchPrefix.length).split(/[?#]/)[0] ?? "";
+  }
+  return trimmed;
 }
 
+function getDisplayMediaOptions(resolution: "720" | "1080", fps: number) {
+  return {
+    video: {
+      width: { ideal: Number(resolution) === 720 ? 1280 : 1920 },
+      height: { ideal: Number(resolution) },
+      frameRate: { ideal: fps },
+    },
+    audio: true,
+    systemAudio: "include",
+    windowAudio: "system",
+  } satisfies DisplayMediaStreamOptions & {
+    systemAudio: "include";
+    windowAudio: "system";
+  };
+}
+
+function logCaptureTracks(label: string, stream: MediaStream) {
+  console.info(`[Share] ${label}`, {
+    userAgent: navigator.userAgent,
+    videoTracks: stream.getVideoTracks().map((track) => ({
+      label: track.label,
+      readyState: track.readyState,
+      settings: track.getSettings(),
+    })),
+    audioTracks: stream.getAudioTracks().map((track) => ({
+      label: track.label,
+      readyState: track.readyState,
+      settings: track.getSettings(),
+    })),
+  });
+}
 function Share() {
 	const navigate = useNavigate();
 	const [streamCode, setStreamCode] = useState<string | null>(null);
@@ -249,15 +280,9 @@ function Share() {
 			const transceivers = transceiversRef.current;
 			if (!pc || !oldStream || !transceivers) return;
 
-			const newScreen = await navigator.mediaDevices.getDisplayMedia({
-				video: {
-					width: { ideal: Number(resolution) === 720 ? 1280 : 1920 },
-					height: { ideal: Number(resolution) },
-					frameRate: { ideal: fps },
-				},
-				audio: true,
-			});
+			const newScreen = await navigator.mediaDevices.getDisplayMedia(getDisplayMediaOptions(resolution, fps));
 
+			logCaptureTracks("screen changed", newScreen);
 			setAudioWarning(newScreen.getAudioTracks().length === 0);
 
 			const newVideo = newScreen.getVideoTracks()[0];
@@ -323,15 +348,9 @@ function Share() {
 						},
 						audio: false,
 					})
-				: await navigator.mediaDevices.getDisplayMedia({
-						video: {
-							width: { ideal: Number(resolution) === 720 ? 1280 : 1920 },
-							height: { ideal: Number(resolution) },
-							frameRate: { ideal: fps },
-						},
-						audio: true,
-					});
+				: await navigator.mediaDevices.getDisplayMedia(getDisplayMediaOptions(resolution, fps));
 
+			logCaptureTracks(showWebcam ? "webcam selected" : "screen restored", newStream);
 			setAudioWarning(!showWebcam && newStream.getAudioTracks().length === 0);
 
 			const newVideo = newStream.getVideoTracks()[0];
@@ -383,16 +402,9 @@ function Share() {
 		try {
 			setError(null);
 
-			const screen = await navigator.mediaDevices.getDisplayMedia({
-				video: {
-					width: { ideal: Number(resolution) === 720 ? 1280 : 1920 },
-					height: { ideal: Number(resolution) },
-					frameRate: { ideal: fps },
-				},
-				audio: true,
-			});
+			const screen = await navigator.mediaDevices.getDisplayMedia(getDisplayMediaOptions(resolution, fps));
 			streamRef.current = screen;
-			setAudioWarning(screen.getAudioTracks().length === 0);
+      logCaptureTracks("screen selected", screen);			setAudioWarning(screen.getAudioTracks().length === 0);
 
 			screen.getTracks().forEach((track) => {
 				track.addEventListener("ended", () => stopSharing());
@@ -416,6 +428,10 @@ function Share() {
 
 			const screenAudio = screen.getAudioTracks()[0];
 			const mixedTrack = ensureAudioMix(screenAudio ?? null);
+			console.info("[Share] publishing audio mix", {
+				hasSystemAudio: Boolean(screenAudio),
+				mixedTrackReadyState: mixedTrack.readyState,
+			});
 			syncAudioConnections();
 			const transceivers = [
 				...screen

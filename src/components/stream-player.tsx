@@ -42,7 +42,6 @@ export function StreamPlayer({
 		() => typeof document !== "undefined" && document.pictureInPictureEnabled,
 	);
 	const zoom = useZoomPan();
-
 	useEffect(() => {
 		const video = videoRef.current;
 		if (!video) return;
@@ -57,11 +56,8 @@ export function StreamPlayer({
 	}, []);
 
 	const toggleMute = useCallback(() => {
-		const video = videoRef.current;
-		if (!video) return;
-		video.muted = !video.muted;
-		setMuted(!muted);
-	}, [muted]);
+		setMuted((prev) => !prev);
+	}, []);
 
 	const togglePip = useCallback(async () => {
 		const video = videoRef.current;
@@ -118,10 +114,17 @@ export function StreamPlayer({
 					return;
 				}
 				pcRef.current = pc;
-
 				const remoteStreams = new Map<string, MediaStream>();
 
 				pc.ontrack = (event) => {
+					console.info("[StreamPlayer] remote track", {
+						kind: event.track.kind,
+						readyState: event.track.readyState,
+						streams: event.streams.map((stream) => ({
+							id: stream.id,
+							tracks: stream.getTracks().map((track) => track.kind),
+						})),
+					});
 					if (!videoRef.current) return;
 					const stream = event.streams[0];
 					if (!stream) return;
@@ -246,7 +249,7 @@ export function StreamPlayer({
 			onPointerDown={zoom.onPointerDown}
 			onPointerMove={zoom.onPointerMove}
 			onPointerUp={zoom.onPointerUp}
-			className={`relative group bg-black rounded-lg overflow-hidden w-full h-full flex items-center justify-center ${zoom.scale > 1 ? "cursor-grab" : ""}`}
+			className={`relative group bg-black rounded-lg overflow-hidden w-full h-full flex items-center justify-center aspect-video ${zoom.scale > 1 ? "cursor-grab" : ""}`}
 		>
 			{error && (
 				<div className="absolute inset-0 flex items-center justify-center">
@@ -264,7 +267,7 @@ export function StreamPlayer({
 				ref={videoRef}
 				autoPlay
 				playsInline
-				muted
+				muted={muted}
 				className="w-full h-full object-contain"
 				style={{
 					transform: `scale(${zoom.scale}) translate(${zoom.translate.x}%, ${zoom.translate.y}%)`,
