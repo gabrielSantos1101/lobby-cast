@@ -9,7 +9,7 @@ import {
 	Volume2,
 	VolumeX,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Draggable } from "#/components/draggable";
 import { StreamPlayer } from "#/components/stream-player";
 import { Button } from "#/components/ui/button";
